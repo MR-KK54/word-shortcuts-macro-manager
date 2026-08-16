@@ -634,11 +634,9 @@ function renderGroupedMacros() {
       };
       stamp.querySelector('[data-act=edit]').onclick = () => {
         $('#m-group').value = macro.group || '';
-        $('#m-name').value = macro.name;
-        $('#m-type').value = macro.type || 'bas';
-        $('#m-code').value = macro.code;
+        $('#m-shortcut-set').value = '';
         window.scrollTo({ top: $('#tab-macros').offsetTop, behavior: 'smooth' });
-        showToast(`Loaded ${macro.name} into editor`);
+        showToast(`Loaded ${macro.name} — pick a shortcut set to recreate macros`);
       };
       stamp.querySelector('[data-act=del]').onclick = async () => {
         if (confirm(`Delete macro "${macro.name}" from group "${macro.group}"?`)) {
@@ -689,61 +687,90 @@ function renderGroupedMacros() {
 $('#m-search').addEventListener('input', renderGroupedMacros);
 $('#m-filter-group').addEventListener('change', renderGroupedMacros);
 
-// Save Macro Click Event
+// Save Macro Click Event — creates macros from the chosen imported shortcut set
 $('#m-save').addEventListener('click', async () => {
   const group = $('#m-group').value.trim() || 'General';
-  const name = $('#m-name').value.trim();
-  const type = $('#m-type').value;
-  const code = $('#m-code').value;
+  const setName = $('#m-shortcut-set').value;
   const status = $('#m-status');
 
-  if (!name || !code.trim()) {
-    status.textContent = 'Module name and code are required.';
+  if (!setName) {
+    status.textContent = 'Select an imported shortcut set first.';
     status.className = 'status-msg err';
     return;
   }
 
-  status.textContent = 'Saving macro…';
+  const set = currentShortcuts.find(s => s.name === setName);
+  if (!set || !set.csv) {
+    status.textContent = 'Shortcut set not found.';
+    status.className = 'status-msg err';
+    return;
+  }
+
+  // Extract unique commands from the CSV, one macro per command
+  const commands = new Set();
+  (set.csv.split(/\r?\n/).slice(1)).forEach(line => {
+    if (!line.trim()) return;
+    const parts = line.split(',');
+    if (parts.length >= 2 && parts[1].trim()) commands.add(parts[1].trim());
+  });
+
+  if (commands.size === 0) {
+    status.textContent = 'No commands found in this shortcut set.';
+    status.className = 'status-msg err';
+    return;
+  }
+
+  status.textContent = `Saving ${commands.size} macro(s)…`;
   status.className = 'status-msg';
 
   try {
-    const payload = { group, name, type, code };
-
-    if (isServerOnline) {
-      const res = await fetch(`${apiBaseUrl}/macros`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Server save failed');
-      showToast(data.action === 'replaced' ? `Replaced existing macro "${name}"` : `Saved macro "${name}"`);
-
-      // Auto-bundle: if a shortcut set is being imported with the same group, save it along with the macro
-      await saveGroupShortcutSet(group);
-    } else {
-      // Offline LocalStorage Save
-      const existingIdx = currentMacros.findIndex(m =>
-        m.name.toLowerCase() === name.toLowerCase() &&
-        (m.group || 'General').toLowerCase() === group.toLowerCase()
-      );
-      const macroObj = {
-        id: existingIdx >= 0 ? currentMacros[existingIdx].id : 'macro-local-' + Date.now(),
-        group, name, type, code, updatedAt: new Date().toISOString()
+    let saved = 0, replaced = 0;
+    for (const cmd of commands) {
+      const name = cmd.split('.').pop(); // Normal.Module3.DecrementLeading -> DecrementLeading
+      const payload = {
+        group,
+        name,
+        type: 'bas',
+        code: `Attribute VB_Name = "${name}"\n\nSub ${name}()\n    ' Macro from shortcut set "${setName}"\nEnd Sub`
       };
-      if (existingIdx >= 0) currentMacros[existingIdx] = macroObj;
-      else currentMacros.push(macroObj);
-
-      localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
-      showToast(existingIdx >= 0 ? `Replaced local macro "${name}"` : `Saved local macro "${name}"`);
-      await saveGroupShortcutSet(group);
+      let action = 'created';
+      if (isServerOnline) {
+        const res = await fetch(`${apiBaseUrl}/macros`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Server save failed');
+        action = data.action;
+      } else {
+        const existingIdx = currentMacros.findIndex(m =>
+          m.name.toLowerCase() === payload.name.toLowerCase() &&
+          (m.group || 'General').toLowerCase() === group.toLowerCase()
+        );
+        const macroObj = {
+          id: existingIdx >= 0 ? currentMacros[existingIdx].id : 'macro-local-' + Date.now(),
+          ...payload, updatedAt: new Date().toISOString()
+        };
+        if (existingIdx >= 0) { currentMacros[existingIdx] = macroObj; action = 'replaced'; }
+        else currentMacros.push(macroObj);
+        localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
+      }
+      if (action === 'replaced') replaced++; else saved++;
     }
 
-    status.textContent = 'Saved successfully!';
+    // Bundle the shortcut set into the same group (update in place, no duplicates)
+    const scIdx = currentShortcuts.findIndex(s => s.name === setName);
+    if (scIdx >= 0) {
+      await saveShortcutItem({ id: currentShortcuts[scIdx].id, name: setName, group, csv: set.csv });
+    } else {
+      await saveShortcutItem({ name: setName, group, csv: set.csv });
+    }
+
+    showToast(`Saved ${saved} new macro(s), replaced ${replaced}`);
+    status.textContent = `Saved ${saved + replaced} macro(s) into "${group}"!`;
     status.className = 'status-msg';
-    $('#m-name').value = '';
-    $('#m-code').value = '';
-    refreshMacros();
+    refreshAllData();
   } catch (e) {
     status.textContent = 'Save failed: ' + e.message;
     status.className = 'status-msg err';
@@ -772,6 +799,16 @@ function exportMacroGroup(groupName, items) {
 }
 
 /* ---------- SHORTCUTS MANAGEMENT ---------- */
+function populateMacroShortcutPicker() {
+  const picker = $('#m-shortcut-set');
+  if (!picker) return;
+  const prev = picker.value;
+  picker.innerHTML = '<option value="">— Select an imported shortcut set —</option>' +
+    currentShortcuts.map(sc =>
+      `<option value="${escapeHtml(sc.name)}"${sc.name === prev ? ' selected' : ''}>${escapeHtml(sc.name)}${sc.group && sc.group !== 'General' ? ` (${escapeHtml(sc.group)})` : ''}` 
+    ).join('');
+}
+
 async function refreshShortcuts() {
   const listEl = $('#s-list');
   try {
@@ -789,10 +826,12 @@ async function refreshShortcuts() {
 
   if (currentShortcuts.length === 0) {
     listEl.innerHTML = '<div class="empty">No shortcut sets saved yet.</div>';
+    populateMacroShortcutPicker();
     return;
   }
 
   listEl.innerHTML = '';
+  populateMacroShortcutPicker();
   currentShortcuts.forEach(sc => {
     const rows = (sc.csv.match(/\n/g) || []).length;
     const el = document.createElement('div');
@@ -1350,7 +1389,13 @@ async function saveShortcutItem(item) {
       body: JSON.stringify(item)
     });
   } else {
-    currentShortcuts.push({ ...item, id: 'sc-' + Date.now(), updatedAt: new Date().toISOString() });
+    const idx = currentShortcuts.findIndex(s =>
+      (item.id && s.id === item.id) ||
+      (s.name.toLowerCase() === (item.name || '').toLowerCase() &&
+       (s.group || 'General').toLowerCase() === ((item.group || 'General') || 'General').toLowerCase())
+    );
+    if (idx >= 0) currentShortcuts[idx] = { ...currentShortcuts[idx], ...item, updatedAt: new Date().toISOString() };
+    else currentShortcuts.push({ ...item, id: 'sc-' + Date.now(), updatedAt: new Date().toISOString() });
     localStorage.setItem('wt_local_shortcuts', JSON.stringify(currentShortcuts));
   }
 }

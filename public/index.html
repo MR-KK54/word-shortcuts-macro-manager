@@ -40,27 +40,19 @@
       <div class="panel-grid">
         <div>
           <h2 class="section-title">Store a Macro</h2>
-          <p class="section-sub">Paste VBA module code exported from Word (Alt+F11 → Export File). If a macro with the same name exists in a group, it will be updated/replaced automatically.</p>
+          <p class="section-sub">Macros are created directly from the shortcut sets you already imported — no manual module name, type, or VBA code needed. Every unique command in the chosen shortcut set becomes a macro in the group.</p>
 
           <label for="m-group">Storing Group Name</label>
           <input type="text" id="m-group" placeholder="e.g. Formatting Tools, Legal Automation, General" list="group-suggestions">
           <datalist id="group-suggestions"></datalist>
 
-          <label for="m-name">Module Name</label>
-          <input type="text" id="m-name" placeholder="e.g. FormatCleanup">
-
-          <label for="m-type">Module Type</label>
-          <select id="m-type">
-            <option value="bas">Standard module (.bas)</option>
-            <option value="cls">Class module (.cls)</option>
-            <option value="frm">Form (.frm)</option>
+          <label for="m-shortcut-set">Shortcut Set</label>
+          <select id="m-shortcut-set">
+            <option value="">— Select an imported shortcut set —</option>
           </select>
 
-          <label for="m-code">VBA Code</label>
-          <textarea id="m-code" placeholder="Sub MyMacro()&#10;    ' Your VBA logic here...&#10;End Sub"></textarea>
-
           <div class="save-row">
-            <button class="btn" id="m-save">Save / Replace Macro</button>
+            <button class="btn" id="m-save">Save Macros from Shortcuts</button>
             <span class="status-msg" id="m-status"></span>
           </div>
         </div>
