@@ -109,6 +109,7 @@ function readDB() {
     if (!data.shortcuts) data.shortcuts = [];
     if (!data.ribbon) data.ribbon = [];
     seedMissingDefaults(data);
+    if (dedupeShortcuts(data)) writeDB(data);
     return data;
   } catch (err) {
     console.error('Error reading DB, restoring default structure:', err);
@@ -126,7 +127,7 @@ function seedMissingDefaults(data) {
 
   (defaults.shortcuts || []).forEach(def => {
     const exists = (data.shortcuts || []).some(s =>
-      s.name === def.name && (s.group || 'General').toLowerCase() === (def.group || 'General').toLowerCase()
+      s.name.toLowerCase() === (def.name || '').toLowerCase()
     );
     if (!exists) {
       data.shortcuts.push({ ...def, id: def.id + '-' + Date.now() });
@@ -135,6 +136,24 @@ function seedMissingDefaults(data) {
   });
 
   if (changed) writeDB(data);
+}
+
+// One set per name: merge duplicates (same name in different groups) keeping
+// the most recently updated entry, so bundled saves never show twice.
+function dedupeShortcuts(data) {
+  const seen = new Map();
+  let changed = false;
+  (data.shortcuts || []).forEach(s => {
+    const key = (s.name || '').toLowerCase();
+    const existing = seen.get(key);
+    if (!existing || (s.updatedAt || '') > (existing.updatedAt || '')) seen.set(key, s);
+  });
+  const merged = Array.from(seen.values());
+  if (merged.length !== (data.shortcuts || []).length) {
+    data.shortcuts = merged;
+    changed = true;
+  }
+  return changed;
 }
 
 function writeDB(data) {
@@ -272,8 +291,7 @@ app.post('/api/shortcuts', (req, res) => {
   let existingIndex = id
     ? db.shortcuts.findIndex(s => s.id === id)
     : db.shortcuts.findIndex(s =>
-        s.name.toLowerCase() === cleanName.toLowerCase() &&
-        (s.group || 'General').toLowerCase() === cleanGroup.toLowerCase()
+        s.name.toLowerCase() === cleanName.toLowerCase()
       );
 
   const shortcutObj = {
@@ -434,8 +452,7 @@ app.post('/api/import', (req, res) => {
     if (Array.isArray(data.shortcuts)) {
       data.shortcuts.forEach(newS => {
         const idx = db.shortcuts.findIndex(s =>
-          s.name.toLowerCase() === (newS.name || '').toLowerCase() &&
-          (s.group || 'General').toLowerCase() === (newS.group || 'General').toLowerCase()
+          s.name.toLowerCase() === (newS.name || '').toLowerCase()
         );
         if (idx >= 0) db.shortcuts[idx] = newS;
         else db.shortcuts.push(newS);

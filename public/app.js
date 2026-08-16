@@ -843,10 +843,18 @@ async function refreshShortcuts() {
       const res = await fetch(`${apiBaseUrl}/shortcuts`);
       const data = await res.json();
       currentShortcuts = data.shortcuts || [];
-    } else {
-      const raw = localStorage.getItem('wt_local_shortcuts');
-      currentShortcuts = raw ? JSON.parse(raw) : [];
-    }
+} else {
+    const raw = localStorage.getItem('wt_local_shortcuts');
+    let local = raw ? JSON.parse(raw) : [];
+    const seen = new Map();
+    local.forEach(s => {
+      const key = (s.name || '').toLowerCase();
+      const existing = seen.get(key);
+      if (!existing || (s.updatedAt || '') > (existing.updatedAt || '')) seen.set(key, s);
+    });
+    currentShortcuts = Array.from(seen.values());
+    localStorage.setItem('wt_local_shortcuts', JSON.stringify(currentShortcuts));
+  }
   } catch (e) {
     currentShortcuts = [];
   }
@@ -1418,8 +1426,7 @@ async function saveShortcutItem(item) {
   } else {
     const idx = currentShortcuts.findIndex(s =>
       (item.id && s.id === item.id) ||
-      (s.name.toLowerCase() === (item.name || '').toLowerCase() &&
-       (s.group || 'General').toLowerCase() === ((item.group || 'General') || 'General').toLowerCase())
+      s.name.toLowerCase() === (item.name || '').toLowerCase()
     );
     if (idx >= 0) currentShortcuts[idx] = { ...currentShortcuts[idx], ...item, updatedAt: new Date().toISOString() };
     else currentShortcuts.push({ ...item, id: 'sc-' + Date.now(), updatedAt: new Date().toISOString() });
