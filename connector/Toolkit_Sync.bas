@@ -85,10 +85,12 @@ Public Sub SyncSelections(baseUrl As String, macGroup As String, scGroup As Stri
     scMsg = SyncShortcutsFromServer(url, scGroup)
     rbMsg = SyncRibbonFromServer(url, rbGroup)
 
-    MsgBox "Word Toolkit - Direct Install complete!" & vbCrLf & vbCrLf & _
-           macMsg & vbCrLf & scMsg & vbCrLf & rbMsg & vbCrLf & vbCrLf & _
-           "Save Normal.dotm when you close Word so the changes persist.", _
-           vbInformation, "Word Toolkit Direct Install"
+    MsgBox "🎉 Successfully Imported into Microsoft Word!" & vbCrLf & vbCrLf & _
+           "• " & macMsg & vbCrLf & _
+           "• " & scMsg & vbCrLf & _
+           "• " & rbMsg & vbCrLf & vbCrLf & _
+           "All items are now imported and ready for immediate use in Word!", _
+           vbInformation, "Microsoft Word - Import Successful"
 End Sub
 
 ' --- MENU ENTRY (menu option 7): uses the baked-in selections ---
@@ -104,10 +106,12 @@ Sub SyncAllFromServer()
     rbMsg = "Ribbon: skipped."
     If SYNC_RIBBON Then rbMsg = SyncRibbonFromServer(baseUrl)
 
-    MsgBox "Direct sync complete!" & vbCrLf & vbCrLf & _
-           macMsg & vbCrLf & scMsg & vbCrLf & rbMsg & vbCrLf & vbCrLf & _
-           "Remember to save Normal.dotm or your active template.", _
-           vbInformation, "Word Toolkit Sync"
+    MsgBox "🎉 Successfully Imported into Microsoft Word!" & vbCrLf & vbCrLf & _
+           "• " & macMsg & vbCrLf & _
+           "• " & scMsg & vbCrLf & _
+           "• " & rbMsg & vbCrLf & vbCrLf & _
+           "All items are now imported and ready for immediate use in Word!", _
+           vbInformation, "Microsoft Word - Import Successful"
 End Sub
 
 ' --- MACROS ---

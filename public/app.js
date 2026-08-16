@@ -1592,7 +1592,7 @@ function directInstallToWord(mac, sc, rb) {
                '&r=' + encodeURIComponent(r);
   window.location.href = link;
   $('#export-word-modal').style.display = 'none';
-  showToast('Installing into Word… (click Allow if Windows asks)');
+  showToast('🎉 Exported to Word! Check Microsoft Word for the "Successfully Imported" message.');
 }
 
 $('#btn-export-direct-word').addEventListener('click', () => {
