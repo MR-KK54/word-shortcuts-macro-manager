@@ -106,27 +106,34 @@ If Err.Number <> 0 Or w Is Nothing Then
 End If
 On Error GoTo 0
 
-' Safely acquire Word's VB project (target NormalTemplate.VBProject)
+Dim docCreated, doc
+docCreated = False
+If w.Documents.Count = 0 Then
+    On Error Resume Next
+    Set doc = w.Documents.Add()
+    docCreated = True
+    On Error GoTo 0
+End If
+
+' Safely acquire Word's VB project
 Set vbProj = Nothing
 On Error Resume Next
 Set vbProj = w.NormalTemplate.VBProject
 If vbProj Is Nothing Then Set vbProj = w.VBE.ActiveVBProject
-If Err.Number <> 0 Or vbProj Is Nothing Then
-    Err.Clear
-    On Error Resume Next
-    w.Quit
-    WScript.Sleep 1000
-    Set w = CreateObject("Word.Application")
-    w.Visible = True
-    Set vbProj = w.NormalTemplate.VBProject
-    If vbProj Is Nothing Then Set vbProj = w.VBE.ActiveVBProject
-End If
+If vbProj Is Nothing And Not doc Is Nothing Then Set vbProj = doc.VBProject
 On Error GoTo 0
 
 If vbProj Is Nothing Then
     MsgBox "Could not access Word's VBA project." & vbCrLf & vbCrLf & _
-           "Please close Microsoft Word completely and double-click WordToolkit_Setup.vbs again.", _
+           "Please enable VBA access in Word:" & vbCrLf & _
+           "Open Word -> File -> Options -> Trust Center -> Trust Center Settings -> Macro Settings" & vbCrLf & _
+           "-> Check 'Trust access to the VBA project object model' and click OK.", _
            vbExclamation, "Word Toolkit Setup"
+    If docCreated And Not doc Is Nothing Then
+        On Error Resume Next
+        doc.Close False
+        On Error GoTo 0
+    End If
     WScript.Quit
 End If
 
@@ -145,11 +152,18 @@ For i = 0 To UBound(files)
                    "Error (" & Err.Number & "): " & Err.Description & vbCrLf & vbCrLf & _
                    "Please close Microsoft Word completely and run this setup script again.", _
                    vbCritical, "Word Toolkit Setup"
+            If docCreated And Not doc Is Nothing Then doc.Close False
             WScript.Quit
         End If
         On Error GoTo 0
     End If
 Next
+
+If docCreated And Not doc Is Nothing Then
+    On Error Resume Next
+    doc.Close False
+    On Error GoTo 0
+End If
 
 ' --- 5. Tell Word to remember the modules ---
 On Error Resume Next
@@ -164,25 +178,23 @@ MsgBox "Word Toolkit setup complete!" & vbCrLf & vbCrLf & _
        "Now click 'Export to Word' or 'Enable Word Import Access' on the web tool.", _
        vbInformation, "Word Toolkit Setup"
 
-' ============================================================
-' Enables Word's import permissions for the toolkit:
-'  - AccessVBOM : "Trust access to the VBA project object model"
-'  - Level      : enable all macros
-'  - VBAWarnings: no warnings for unsigned macros
-' Applied for every installed Office version key. A running
-' Word reads these at startup, so restart Word to apply.
-' ============================================================
 Sub EnableWordAccess(Wsh)
-    Dim versions, v, secKey
+    Dim versions, v, secKey, polKey
     versions = Array("16.0", "15.0", "14.0", "12.0", "11.0")
     For Each v In versions
         secKey = "HKCU\Software\Microsoft\Office\" & v & "\Word\Security\"
+        polKey = "HKCU\Software\Policies\Microsoft\Office\" & v & "\Word\Security\"
         On Error Resume Next
         Wsh.RegWrite secKey & "AccessVBOM", 1, "REG_DWORD"
         Wsh.RegWrite secKey & "Level", 1, "REG_DWORD"
         Wsh.RegWrite secKey & "VBAWarnings", 1, "REG_DWORD"
         Wsh.RegWrite secKey & "DisableAllMacros", 0, "REG_DWORD"
         Wsh.RegWrite secKey & "ExtensionHardening", 0, "REG_DWORD"
+        
+        Wsh.RegWrite polKey & "AccessVBOM", 1, "REG_DWORD"
+        Wsh.RegWrite polKey & "Level", 1, "REG_DWORD"
+        Wsh.RegWrite polKey & "VBAWarnings", 1, "REG_DWORD"
+        Wsh.RegWrite polKey & "DisableAllMacros", 0, "REG_DWORD"
         On Error GoTo 0
     Next
 End Sub
