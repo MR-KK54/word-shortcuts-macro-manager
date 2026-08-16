@@ -591,6 +591,9 @@ function renderGroupedMacros() {
     const groupShortcuts = currentShortcuts.filter(sc =>
       (sc.group || 'General').toLowerCase() === groupName.toLowerCase()
     );
+    const groupRibbons = currentRibbon.filter(rb =>
+      (rb.group || 'General').toLowerCase() === groupName.toLowerCase()
+    );
 
     const groupSec = document.createElement('div');
     groupSec.className = 'group-section';
@@ -600,7 +603,7 @@ function renderGroupedMacros() {
     header.innerHTML = `
       <div class="group-title-area">
         <h3 class="group-title">${escapeHtml(groupName)}</h3>
-        <span class="group-count-badge">${items.length} macro${items.length === 1 ? '' : 's'}${groupShortcuts.length > 0 ? ` · ${groupShortcuts.length} shortcut set${groupShortcuts.length === 1 ? '' : 's'}` : ''}</span>
+        <span class="group-count-badge">${items.length} macro${items.length === 1 ? '' : 's'}${groupShortcuts.length > 0 ? ` · ${groupShortcuts.length} shortcut set${groupShortcuts.length === 1 ? '' : 's'}` : ''}${groupRibbons.length > 0 ? ` · ${groupRibbons.length} ribbon` : ''}</span>
       </div>
       <button class="btn small secondary btn-export-group" data-group="${escapeHtml(groupName)}">Export Group (.bas)</button>
     `;
@@ -667,6 +670,30 @@ function renderGroupedMacros() {
       stamp.querySelector('[data-act=sdel]').onclick = async () => {
         if (confirm(`Delete shortcut set "${sc.name}" from group "${groupName}"?`)) {
           await deleteShortcut(sc.id);
+        }
+      };
+      stampsDiv.appendChild(stamp);
+    });
+
+    // Bundled ribbon profiles for this group
+    groupRibbons.forEach(rb => {
+      const stamp = document.createElement('div');
+      stamp.className = 'stamp ribbon-stamp';
+      stamp.innerHTML = `
+        <div class="meta">
+          <span class="badge">.officeUI</span>
+          <p class="name">${escapeHtml(rb.name)}</p>
+          <span class="sub">${escapeHtml(rb.filename || 'Word.officeUI')} · ${fmtDate(rb.updatedAt)}</span>
+        </div>
+        <div class="actions">
+          <button class="btn small secondary" data-act="rdl">Download</button>
+          <button class="btn small ghost-danger" data-act="rdel">Delete</button>
+        </div>
+      `;
+      stamp.querySelector('[data-act=rdl]').onclick = () => downloadBase64(rb.filename || 'Word.officeUI', rb.base64);
+      stamp.querySelector('[data-act=rdel]').onclick = async () => {
+        if (confirm(`Delete ribbon profile "${rb.name}" from group "${groupName}"?`)) {
+          await deleteRibbon(rb.id);
         }
       };
       stampsDiv.appendChild(stamp);
@@ -927,7 +954,7 @@ async function refreshRibbon() {
       <div class="meta">
         <span class="badge">.officeUI</span>
         <p class="name">${escapeHtml(rb.name)}</p>
-        <span class="sub">${escapeHtml(rb.filename || 'Word.officeUI')} · ${fmtDate(rb.updatedAt)}</span>
+        <span class="sub">Group: ${escapeHtml(rb.group || 'General')} · ${escapeHtml(rb.filename || 'Word.officeUI')} · ${fmtDate(rb.updatedAt)}</span>
       </div>
       <div class="actions">
         <button class="btn small secondary" data-act="dl">Download</button>
@@ -941,6 +968,7 @@ async function refreshRibbon() {
 
 $('#r-save').addEventListener('click', () => {
   const name = $('#r-name').value.trim();
+  const group = $('#r-group').value.trim();
   const file = $('#r-file').files[0];
   const status = $('#r-status');
 
@@ -959,15 +987,14 @@ $('#r-save').addEventListener('click', () => {
         await fetch(`${apiBaseUrl}/ribbon`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, filename: file.name, base64 })
+          body: JSON.stringify({ name, group, filename: file.name, base64 })
         });
       } else {
-        currentRibbon.push({ id: 'rb-' + Date.now(), name, filename: file.name, base64, updatedAt: new Date().toISOString() });
-        localStorage.setItem('wt_local_ribbon', JSON.stringify(currentRibbon));
+        await saveRibbonItem({ name, group: group || 'General', filename: file.name, base64 });
       }
       status.textContent = 'Saved!';
       status.className = 'status-msg';
-      $('#r-name').value = ''; $('#r-file').value = '';
+      $('#r-name').value = ''; $('#r-group').value = ''; $('#r-file').value = '';
       showToast('Saved ribbon profile');
       refreshRibbon();
     } catch (e) {
@@ -1438,7 +1465,13 @@ async function saveRibbonItem(item) {
       body: JSON.stringify(item)
     });
   } else {
-    currentRibbon.push({ ...item, id: 'rb-' + Date.now(), updatedAt: new Date().toISOString() });
+    const idx = currentRibbon.findIndex(r =>
+      (item.id && r.id === item.id) ||
+      (r.name.toLowerCase() === (item.name || '').toLowerCase() &&
+       (r.group || 'General').toLowerCase() === ((item.group || 'General') || 'General').toLowerCase())
+    );
+    if (idx >= 0) currentRibbon[idx] = { ...currentRibbon[idx], ...item, updatedAt: new Date().toISOString() };
+    else currentRibbon.push({ ...item, id: 'rb-' + Date.now(), updatedAt: new Date().toISOString() });
     localStorage.setItem('wt_local_ribbon', JSON.stringify(currentRibbon));
   }
 }

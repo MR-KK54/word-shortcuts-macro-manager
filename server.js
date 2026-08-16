@@ -305,21 +305,34 @@ app.delete('/api/shortcuts/:id', (req, res) => {
 // --- RIBBON API ---
 app.get('/api/ribbon', (req, res) => {
   const db = readDB();
-  res.json({ success: true, ribbon: db.ribbon });
+  let ribbon = db.ribbon;
+  const { group } = req.query;
+  if (group) {
+    ribbon = ribbon.filter(r => (r.group || 'General').toLowerCase() === group.toLowerCase());
+  }
+  res.json({ success: true, ribbon });
 });
 
 app.post('/api/ribbon', (req, res) => {
-  const { id, name, filename, base64 } = req.body;
+  const { id, name, filename, base64, group } = req.body;
   if (!name || !name.trim() || !base64) {
     return res.status(400).json({ success: false, error: 'Name and file content are required.' });
   }
 
   const db = readDB();
-  let existingIndex = id ? db.ribbon.findIndex(r => r.id === id) : db.ribbon.findIndex(r => r.name.toLowerCase() === name.trim().toLowerCase());
+  const cleanName = name.trim();
+  const cleanGroup = (group && group.trim()) ? group.trim() : 'General';
+  let existingIndex = id
+    ? db.ribbon.findIndex(r => r.id === id)
+    : db.ribbon.findIndex(r =>
+        r.name.toLowerCase() === cleanName.toLowerCase() &&
+        (r.group || 'General').toLowerCase() === cleanGroup.toLowerCase()
+      );
 
   const ribbonObj = {
     id: existingIndex >= 0 ? db.ribbon[existingIndex].id : 'rb-' + Date.now(),
-    name: name.trim(),
+    group: cleanGroup,
+    name: cleanName,
     filename: filename || 'Word.officeUI',
     base64: base64,
     updatedAt: new Date().toISOString()
@@ -431,7 +444,10 @@ app.post('/api/import', (req, res) => {
 
     if (Array.isArray(data.ribbon)) {
       data.ribbon.forEach(newR => {
-        const idx = db.ribbon.findIndex(r => r.name.toLowerCase() === (newR.name || '').toLowerCase());
+        const idx = db.ribbon.findIndex(r =>
+          r.name.toLowerCase() === (newR.name || '').toLowerCase() &&
+          (r.group || 'General').toLowerCase() === (newR.group || 'General').toLowerCase()
+        );
         if (idx >= 0) db.ribbon[idx] = newR;
         else db.ribbon.push(newR);
       });
