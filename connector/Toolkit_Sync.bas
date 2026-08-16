@@ -127,7 +127,10 @@ Public Function SyncMacrosFromServer(baseUrl As String, Optional grp As String =
     End If
 
     Set fso = CreateObject("Scripting.FileSystemObject")
-    Set vbProj = Application.VBE.ActiveVBProject
+    On Error Resume Next
+    Set vbProj = Application.NormalTemplate.VBProject
+    If vbProj Is Nothing Then Set vbProj = Application.VBE.ActiveVBProject
+    On Error GoTo HandleErr
 
     lines = Split(bundle, vbLf)
     inMacro = False

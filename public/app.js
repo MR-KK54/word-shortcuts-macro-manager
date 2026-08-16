@@ -655,35 +655,61 @@ EnableWordAccess Wsh
 ' --- 4. Import connector modules into Word (handler is NOT imported) ---
 On Error Resume Next
 Set w = GetObject(, "Word.Application")
-If w Is Nothing Then
+If w Is Nothing Or Err.Number <> 0 Then
+    Err.Clear
     Set w = CreateObject("Word.Application")
     w.Visible = True
 End If
-If Err.Number <> 0 Then
+If Err.Number <> 0 Or w Is Nothing Then
     MsgBox "Could not start Microsoft Word." & vbCrLf & "Error: " & Err.Description, vbCritical, "Word Toolkit Setup"
     WScript.Quit
 End If
 On Error GoTo 0
 
+' Safely acquire Word's VB project (target NormalTemplate.VBProject)
+Set vbProj = Nothing
 On Error Resume Next
-Set vbProj = w.VBE.ActiveVBProject
+Set vbProj = w.NormalTemplate.VBProject
+If vbProj Is Nothing Then Set vbProj = w.VBE.ActiveVBProject
+If Err.Number <> 0 Or vbProj Is Nothing Then
+    Err.Clear
+    On Error Resume Next
+    w.Quit
+    WScript.Sleep 1000
+    Set w = CreateObject("Word.Application")
+    w.Visible = True
+    Set vbProj = w.NormalTemplate.VBProject
+    If vbProj Is Nothing Then Set vbProj = w.VBE.ActiveVBProject
+End If
+On Error GoTo 0
+
+If vbProj Is Nothing Then
+    MsgBox "Could not access Word's VBA project." & vbCrLf & vbCrLf & _
+           "Please close Microsoft Word completely and double-click WordToolkit_Setup.vbs again.", _
+           vbExclamation, "Word Toolkit Setup"
+    WScript.Quit
+End If
+
 For i = 0 To UBound(files)
     If LCase(Right(files(i), 4)) = ".bas" Then
         baseName = Replace(files(i), ".bas", "")
+        On Error Resume Next
         Set comp = Nothing
         Set comp = vbProj.VBComponents(baseName)
         If Not comp Is Nothing Then vbProj.VBComponents.Remove comp
+        Err.Clear
         vbProj.VBComponents.Import fso.BuildPath(appDataDir, files(i))
         comp = Nothing
         If Err.Number <> 0 Then
             MsgBox "Importing " & files(i) & " failed." & vbCrLf & _
-                   "Word import access was enabled automatically - restart Word and run this setup again." & vbCrLf & _
-                   "Error: " & Err.Description, vbCritical, "Word Toolkit Setup"
+                   "Error (" & Err.Number & "): " & Err.Description & vbCrLf & vbCrLf & _
+                   "Please close Microsoft Word completely and run this setup script again.", _
+                   vbCritical, "Word Toolkit Setup"
             WScript.Quit
         End If
+        On Error GoTo 0
     End If
 Next
-On Error GoTo 0
 
 ' --- 5. Tell Word to remember the modules ---
 On Error Resume Next
