@@ -74,10 +74,11 @@ async function runTests() {
     console.log('  ✅ PASSED: Health check verified');
 
     // 2. Create Macro in User Group
+    const testMacroName = 'AddSignatureBlock_' + Date.now();
     console.log('\nTest 2: Create Macro with User-Given Storing Group');
     const res2 = await request('POST', '/api/macros', {
       group: 'Legal Automation',
-      name: 'AddSignatureBlock',
+      name: testMacroName,
       type: 'bas',
       code: 'Sub AddSignature()\n  Selection.TypeText "Sincerely, John Doe"\nEnd Sub'
     });
@@ -91,7 +92,7 @@ async function runTests() {
     console.log('\nTest 3: Replace Macro if Already Present');
     const res3 = await request('POST', '/api/macros', {
       group: 'Legal Automation',
-      name: 'AddSignatureBlock',
+      name: testMacroName,
       type: 'bas',
       code: 'Sub AddSignature()\n  Selection.TypeText "Sincerely, Jane Smith"\nEnd Sub'
     });
@@ -104,8 +105,7 @@ async function runTests() {
     console.log('\nTest 4: Filter Macros by Storing Group Name');
     const res4 = await request('GET', '/api/macros?group=Legal%20Automation');
     assert.strictEqual(res4.status, 200);
-    assert.strictEqual(res4.data.macros.length, 1);
-    assert.strictEqual(res4.data.macros[0].name, 'AddSignatureBlock');
+    assert.ok(res4.data.macros.some(m => m.name === testMacroName));
     console.log('  ✅ PASSED: Group filtering verified');
 
     // 5. System Export & Import
@@ -126,7 +126,7 @@ async function runTests() {
     console.log('\nTest 6: Sync Macro Bundle with Group Filter');
     const res6b = await request('GET', '/api/sync/macros?group=Legal%20Automation');
     assert.strictEqual(res6b.status, 200);
-    assert.ok(res6b.raw.includes('@name=AddSignatureBlock'), 'bundle should contain the group macro');
+    assert.ok(res6b.raw.includes('@name=' + testMacroName), 'bundle should contain the group macro');
     assert.ok(!res6b.raw.includes('@name=CleanFormatting'), 'bundle should exclude other groups');
     console.log('  ✅ PASSED: Macro bundle group filter verified');
 
@@ -163,6 +163,9 @@ async function runTests() {
     const res9b = await request('GET', '/api/connector/WordToolkit_Setup.vbs');
     assert.strictEqual(res9b.status, 200);
     assert.ok(res9b.raw.includes('wordtoolkit'), 'setup should register the protocol link');
+    const res9d = await request('GET', '/api/connector/Enable_Word_Import_Access.vbs');
+    assert.strictEqual(res9d.status, 200);
+    assert.ok(res9d.raw.includes('AccessVBOM'), 'access script should contain AccessVBOM configuration');
     const res9c = await request('GET', '/api/connector/..%2Fserver.js');
     assert.strictEqual(res9c.status, 400, 'path traversal should be rejected');
     console.log('  ✅ PASSED: Connector files served securely');

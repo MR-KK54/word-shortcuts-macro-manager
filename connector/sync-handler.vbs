@@ -37,6 +37,8 @@ For Each v In Array("16.0", "15.0", "14.0", "12.0", "11.0")
     Wsh.RegWrite secKey & "AccessVBOM", 1, "REG_DWORD"
     Wsh.RegWrite secKey & "Level", 1, "REG_DWORD"
     Wsh.RegWrite secKey & "VBAWarnings", 1, "REG_DWORD"
+    Wsh.RegWrite secKey & "DisableAllMacros", 0, "REG_DWORD"
+    Wsh.RegWrite secKey & "ExtensionHardening", 0, "REG_DWORD"
     On Error GoTo 0
 Next
 

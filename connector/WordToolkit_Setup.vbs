@@ -31,7 +31,7 @@ If Not fso.FolderExists(appDataDir) Then fso.CreateFolder appDataDir
 
 files = Array("Toolkit_Helpers.bas", "Toolkit_Macros.bas", "Toolkit_Menu.bas", _
               "Toolkit_RibbonQAT.bas", "Toolkit_Shortcuts.bas", "Toolkit_Sync.bas", _
-              "sync-handler.vbs")
+              "sync-handler.vbs", "Enable_Word_Import_Access.vbs")
 n = 0
 For i = 0 To UBound(files)
     On Error Resume Next
@@ -132,6 +132,8 @@ Sub EnableWordAccess(Wsh)
         Wsh.RegWrite secKey & "AccessVBOM", 1, "REG_DWORD"
         Wsh.RegWrite secKey & "Level", 1, "REG_DWORD"
         Wsh.RegWrite secKey & "VBAWarnings", 1, "REG_DWORD"
+        Wsh.RegWrite secKey & "DisableAllMacros", 0, "REG_DWORD"
+        Wsh.RegWrite secKey & "ExtensionHardening", 0, "REG_DWORD"
         On Error GoTo 0
     Next
 End Sub
