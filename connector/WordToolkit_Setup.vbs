@@ -68,7 +68,10 @@ Set f = fso.CreateTextFile(handlerPath, True, True)
 f.Write HandlerSource()
 f.Close
 
-' --- 4. Import connector modules into Word ---
+' --- 4. Enable Word import access automatically (trust + enable all macros) ---
+EnableWordAccess Wsh
+
+' --- 5. Import connector modules into Word ---
 On Error Resume Next
 Set w = GetObject(, "Word.Application")
 If w Is Nothing Then
@@ -107,20 +110,43 @@ On Error GoTo 0
 MsgBox "Word Toolkit setup complete!" & vbCrLf & vbCrLf & _
        n & " connector module(s) downloaded from " & url & vbCrLf & _
        "Modules imported into Word (remember to save Normal.dotm when closing Word)." & vbCrLf & _
+       "Word import access enabled automatically (Trust access + enable all macros)." & vbCrLf & _
        "The wordtoolkit:// link is now registered." & vbCrLf & vbCrLf & _
        "You can now click 'Export to Word' on the web tool to install directly.", _
        vbInformation, "Word Toolkit Setup"
 
 ' ============================================================
+' Enables Word's import permissions for the toolkit:
+'  - AccessVBOM : "Trust access to the VBA project object model"
+'  - Level      : enable all macros
+'  - VBAWarnings: no warnings for unsigned macros
+' Applied for every installed Office version key. A running
+' Word reads these at startup, so restart Word to apply.
+' ============================================================
+Sub EnableWordAccess(Wsh)
+    Dim versions, v, secKey
+    versions = Array("16.0", "15.0", "14.0", "12.0", "11.0")
+    For Each v In versions
+        secKey = "HKCU\Software\Microsoft\Office\" & v & "\Word\Security\"
+        On Error Resume Next
+        Wsh.RegWrite secKey & "AccessVBOM", 1, "REG_DWORD"
+        Wsh.RegWrite secKey & "Level", 1, "REG_DWORD"
+        Wsh.RegWrite secKey & "VBAWarnings", 1, "REG_DWORD"
+        On Error GoTo 0
+    Next
+End Sub
+
+' ============================================================
 ' Returns the source of the sync-handler.vbs written above.
 ' (Kept as a string so this file stays fully self-contained.)
+' Every direct install re-asserts the Word access settings.
 ' ============================================================
 Function HandlerSource()
     Dim h
     h = "Option Explicit" & vbCrLf
     h = h & "'' Word Toolkit - receives wordtoolkit://sync links from the web tool" & vbCrLf
     h = h & "'' and tells the running Microsoft Word to install the selection." & vbCrLf
-    h = h & "Dim argLine, parts, kv, i, dict, p, k, u, m, s, r, w" & vbCrLf
+    h = h & "Dim argLine, parts, kv, i, dict, p, k, u, m, s, r, w, Wsh, v, secKey" & vbCrLf
     h = h & "argLine = """ & vbCrLf
     h = h & "If WScript.Arguments.Count > 0 Then argLine = WScript.Arguments(0)" & vbCrLf
     h = h & "Set dict = CreateObject(""Scripting.Dictionary"")" & vbCrLf
@@ -133,6 +159,21 @@ Function HandlerSource()
     h = h & "        dict(k) = Unescape(kv(1))" & vbCrLf
     h = h & "    End If" & vbCrLf
     h = h & "Next" & vbCrLf
+    h = h & "'' Enable Word import access automatically every time" & vbCrLf
+    h = h & "Set Wsh = CreateObject(""WScript.Shell"")" & vbCrLf
+    h = h & "For Each v In Array(""16.0"", ""15.0"", ""14.0"", ""12.0"", ""11.0"")" & vbCrLf
+    h = h & "    secKey = ""HKCU\Software\Microsoft\Office\"" & v & ""\Word\Security\""" & vbCrLf
+    h = h & "    On Error Resume Next" & vbCrLf
+    h = h & "    Wsh.RegWrite secKey & ""AccessVBOM"", 1, ""REG_DWORD""" & vbCrLf
+    h = h & "    Wsh.RegWrite secKey & ""Level"", 1, ""REG_DWORD""" & vbCrLf
+    h = h & "    Wsh.RegWrite secKey & ""VBAWarnings"", 1, ""REG_DWORD""" & vbCrLf
+    h = h & "    On Error GoTo 0" & vbCrLf
+    h = h & "Next" & vbCrLf
+    h = h & "'' Special action: just enable access (web tool button)" & vbCrLf
+    h = h & "If dict.Exists(""act"") And dict(""act"") = ""enable"" Then" & vbCrLf
+    h = h & "    MsgBox ""Word import access enabled (Trust access + all macros)."" & vbCrLf & ""Restart Word once, then install again."" & vbCrLf & ""Nothing was imported."", vbInformation, ""Word Toolkit""" & vbCrLf
+    h = h & "    WScript.Quit" & vbCrLf
+    h = h & "End If" & vbCrLf
     h = h & "u = dict(""u""): m = dict(""m""): s = dict(""s""): r = dict(""r"")" & vbCrLf
     h = h & "On Error Resume Next" & vbCrLf
     h = h & "Set w = GetObject(, ""Word.Application"")" & vbCrLf
