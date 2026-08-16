@@ -1133,6 +1133,180 @@ $('#io-btn-restore').addEventListener('click', () => {
 });
 
 /* ---------- BATCH DRAG & DROP ZONE ---------- */
+
+// Convert a Word-exported shortcut .txt (pipe format:
+// KeyString|KeyCode|KeyCategory|Command|CommandParameter) into the tool CSV format.
+function convertShortcutTxtToCsv(text) {
+  const lines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const headerIdx = lines.findIndex(l => /^(KeyString\||FORMAT:\s*KeyString\|)/i.test(l));
+  const startIdx = headerIdx === -1 ? 0 : headerIdx + 1;
+
+  const out = ['KeyCategory,Command,KeyCode,KeyCode2,KeyString'];
+  let converted = 0;
+  for (let i = startIdx; i < lines.length; i++) {
+    const ln = lines[i];
+    if (/^-{3,}/.test(ln) || /^Total:|^FORMAT:/i.test(ln) || /^KeyString\|/i.test(ln)) continue;
+    const parts = ln.split('|');
+    if (parts.length >= 4) {
+      const keyString = parts[0].trim();
+      const keyCode = parts[1].trim();
+      const keyCategory = parts[2].trim();
+      const command = parts[3].trim();
+      if (keyString && /^-?\d+$/.test(keyCode) && /^-?\d+$/.test(keyCategory) && command) {
+        out.push(`${keyCategory},${command},${keyCode},0,"${keyString.replace(/\"/g, '""')}"`);
+        converted++;
+      }
+    }
+  }
+  if (converted === 0) return null;
+  return { csv: out.join('\n'), converted };
+}
+
+// Read all dropped files, build a preview list, and show the modal.
+async function handleBatchFiles(files) {
+  const previews = [];
+  for (const file of Array.from(files)) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const item = { file, name: file.name, ext };
+
+    if (['bas', 'cls', 'frm'].includes(ext)) {
+      const t = await file.text();
+      let modName = file.name.replace(/\.[^/.]+$/, "");
+      const m = t.match(/Attribute\s+VB_Name\s*=\s*"([^"]+)"/i);
+      if (m && m[1]) modName = m[1];
+      item.kind = 'macro';
+      item.displayName = modName;
+      item.sub = `${ext.toUpperCase()} module`;
+      item.payload = { group: 'Imported Files', name: modName, type: ext, code: t };
+    } else if (ext === 'csv') {
+      const t = await file.text();
+      item.kind = 'shortcut';
+      item.displayName = file.name.replace(/\.csv$/i, '');
+      item.sub = 'CSV shortcut set';
+      item.payload = { name: file.name.replace(/\.csv$/i, ''), csv: t };
+    } else if (ext === 'txt') {
+      const t = await file.text();
+      const conv = convertShortcutTxtToCsv(t);
+      if (conv) {
+        item.kind = 'shortcut';
+        item.displayName = file.name.replace(/\.txt$/i, '');
+        item.sub = `TXT → CSV (${conv.converted} shortcuts converted)`;
+        item.payload = { name: file.name.replace(/\.txt$/i, ''), csv: conv.csv };
+      } else {
+        item.kind = 'skip';
+        item.displayName = file.name;
+        item.sub = 'TXT not in shortcut format — import as macro code instead?';
+        item.payload = { name: file.name.replace(/\.txt$/i, ''), csv: t };
+      }
+    } else if (ext === 'officeui') {
+      item.kind = 'ribbon';
+      item.displayName = file.name.replace(/\.officeui$/i, '');
+      item.sub = 'Ribbon / QAT profile';
+    } else {
+      item.kind = 'skip';
+      item.displayName = file.name;
+      item.sub = 'Unsupported file type';
+    }
+    previews.push(item);
+  }
+  showImportPreview(previews);
+}
+
+function showImportPreview(previews) {
+  const list = $('#import-preview-list');
+  list.innerHTML = '';
+  previews.forEach((p, i) => {
+    const icon = p.kind === 'macro' ? '🧩' : p.kind === 'shortcut' ? '⌨️' : p.kind === 'ribbon' ? '📎' : '⚠️';
+    const sub = p.sub || '';
+    const el = document.createElement('div');
+    el.className = 'io-preview-item';
+    el.innerHTML = `<span class="p-icon">${icon}</span><span class="p-name">${escapeHtml(p.displayName)}</span><span class="p-sub">${escapeHtml(sub)}</span>`;
+    list.appendChild(el);
+  });
+
+  $('#import-preview-modal').style.display = 'flex';
+  $('#btn-preview-cancel').onclick = () => {
+    $('#import-preview-modal').style.display = 'none';
+  };
+  $('#btn-preview-start').onclick = async () => {
+    $('#import-preview-modal').style.display = 'none';
+    await runBatchImport(previews);
+  };
+}
+
+async function runBatchImport(previews) {
+  const total = previews.filter(p => p.kind !== 'skip').length;
+  let count = 0;
+  let failed = 0;
+  const importedShortcutSets = [];
+  showProgress(`Importing 0 of ${total} files…`, 0);
+
+  for (let i = 0; i < previews.length; i++) {
+    const p = previews[i];
+    showProgress(`Importing "${p.displayName}"…`, Math.round((count / total) * 100));
+    try {
+      if (p.kind === 'macro') {
+        await saveMacroItem(p.payload);
+        count++;
+      } else if (p.kind === 'shortcut') {
+        await saveShortcutItem(p.payload);
+        importedShortcutSets.push(p.payload);
+        count++;
+      } else if (p.kind === 'ribbon') {
+        const base64 = await readFileAsBase64(p.file);
+        await saveRibbonItem({ name: p.displayName, filename: p.file.name, base64 });
+        count++;
+      } else {
+        failed++;
+      }
+    } catch (err) {
+      failed++;
+      console.error('Import failed for', p.displayName, err);
+    }
+    showProgress(`Imported ${count} of ${total} files…`, Math.round((count / total) * 100));
+  }
+
+  if (count === total) showProgress(`All ${count} file(s) imported`, 100);
+  else showProgress(`Imported ${count} of ${total} (${failed} failed)`, Math.round((count / total) * 100));
+  setTimeout(hideProgress, 1200);
+  showToast(`Successfully processed ${count} file(s)!` + (failed > 0 ? ` ${failed} failed.` : ''));
+  refreshAllData();
+
+  // After import: ask whether to save the shortcut sets into the macro group
+  const hasMacros = previews.some(p => p.kind === 'macro');
+  if (importedShortcutSets.length > 0 && hasMacros) {
+    showPostImportPrompt(importedShortcutSets);
+  }
+}
+
+function showPostImportPrompt(shortcutSets) {
+  $('#post-import-msg').textContent =
+    `The import included ${shortcutSets.length} shortcut set(s). Save them into the same group as the imported macros?`;
+  $('#post-import-modal').style.display = 'flex';
+
+  $('#btn-post-skip').onclick = () => {
+    $('#post-import-modal').style.display = 'none';
+  };
+  $('#btn-post-save').onclick = async () => {
+    $('#post-import-modal').style.display = 'none';
+    const group = $('#post-import-group').value.trim() || 'Imported Files';
+    showProgress(`Saving ${shortcutSets.length} shortcut set(s) into "${group}"…`, 10);
+    let done = 0;
+    try {
+      for (const sc of shortcutSets) {
+        await saveShortcutItem({ name: sc.name, group, csv: sc.csv });
+        done++;
+        showProgress(`Saving ${sc.name}…`, Math.round((done / shortcutSets.length) * 100));
+      }
+      showToast(`Saved ${shortcutSets.length} shortcut set(s) into "${group}"`);
+    } catch (err) {
+      showToast('Could not save shortcut sets: ' + err.message);
+    }
+    setTimeout(hideProgress, 1200);
+    refreshAllData();
+  };
+}
+
 function initBatchDropZone() {
   const zone = $('#batch-drop-zone');
   const fileInput = $('#batch-file-input');
@@ -1150,62 +1324,6 @@ function initBatchDropZone() {
   fileInput.onchange = () => {
     if (fileInput.files.length) handleBatchFiles(fileInput.files);
   };
-}
-
-async function handleBatchFiles(files) {
-  const total = Array.from(files).length;
-  let count = 0;
-  let failed = 0;
-  showProgress(`Importing 0 of ${total} files…`, 0);
-  for (const file of Array.from(files)) {
-    const idx = count + failed;
-    const pct = Math.round(((idx) / total) * 100);
-    showProgress(`Importing "${file.name}"…`, pct);
-    const ext = file.name.split('.').pop().toLowerCase();
-    try {
-      if (['bas', 'cls', 'frm'].includes(ext)) {
-        const text = await file.text();
-        // Parse module name from Attribute VB_Name if present
-        let modName = file.name.replace(/\.[^/.]+$/, "");
-        const match = text.match(/Attribute\s+VB_Name\s*=\s*"([^"]+)"/i);
-        if (match && match[1]) modName = match[1];
-
-        await saveMacroItem({
-          group: 'Imported Files',
-          name: modName,
-          type: ext,
-          code: text
-        });
-        count++;
-      } else if (ext === 'csv') {
-        const text = await file.text();
-        await saveShortcutItem({
-          name: file.name.replace(/\.csv$/i, ''),
-          csv: text
-        });
-        count++;
-      } else if (ext === 'officeui') {
-        const base64 = await readFileAsBase64(file);
-        await saveRibbonItem({
-          name: file.name.replace(/\.officeui$/i, ''),
-          filename: file.name,
-          base64: base64
-        });
-        count++;
-      } else {
-        failed++;
-      }
-    } catch (err) {
-      failed++;
-      console.error('Import failed for', file.name, err);
-    }
-    showProgress(`Imported ${count} of ${total} files…`, Math.round((count / total) * 100));
-  }
-  if (count === total) showProgress(`All ${count} file(s) imported`, 100);
-  else showProgress(`Imported ${count} of ${total} (${failed} failed)`, Math.round((count / total) * 100));
-  setTimeout(hideProgress, 1500);
-  showToast(`Successfully processed ${count} file(s)!` + (failed > 0 ? ` ${failed} failed.` : ''));
-  refreshAllData();
 }
 
 async function saveMacroItem(item) {

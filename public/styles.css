@@ -366,6 +366,32 @@ input:focus, select:focus, textarea:focus {
   transition: width 0.15s ease;
 }
 
+.io-preview-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 14px 0;
+  background: #fff;
+}
+.io-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0ece2;
+  font-size: 13px;
+}
+.io-preview-item:last-child { border-bottom: none; }
+.io-preview-item .p-icon { font-size: 16px; }
+.io-preview-item .p-name { font-weight: 600; color: var(--ink); }
+.io-preview-item .p-sub {
+  font-size: 12px;
+  color: var(--amber-deep);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .drop-zone {
   border: 2px dashed var(--amber);
   border-radius: var(--radius);

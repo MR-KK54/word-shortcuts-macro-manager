@@ -202,8 +202,8 @@
       <div class="drop-zone" id="batch-drop-zone">
         <i>📁</i>
         <strong>Drag files here or click to browse</strong>
-        <p style="margin: 6px 0 0; font-size:12px; color:var(--ink-soft);">Supports .bas, .cls, .frm (VBA), .csv (Shortcuts), .officeUI (Ribbon)</p>
-        <input type="file" id="batch-file-input" multiple style="display:none;" accept=".bas,.cls,.frm,.csv,.officeUI,.json">
+        <p style="margin: 6px 0 0; font-size:12px; color:var(--ink-soft);">Supports .bas, .cls, .frm (VBA), .csv / .txt (Shortcuts — .txt is converted automatically), .officeUI (Ribbon)</p>
+        <input type="file" id="batch-file-input" multiple style="display:none;" accept=".bas,.cls,.frm,.csv,.txt,.officeUI,.json">
       </div>
     </section>
 
@@ -226,6 +226,37 @@
     </section>
 
   </main>
+</div>
+
+<!-- IMPORT PREVIEW MODAL -->
+<div class="modal-backdrop" id="import-preview-modal" style="display:none;">
+  <div class="modal-box">
+    <h2 class="section-title">Import Preview</h2>
+    <p class="section-sub">Review the files before importing. Shortcut <code>.txt</code> files are auto-converted to the tool's CSV format.</p>
+
+    <div class="io-preview-list" id="import-preview-list"></div>
+
+    <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn secondary" id="btn-preview-cancel">Cancel</button>
+      <button class="btn" id="btn-preview-start">Start Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- POST-IMPORT SAVE PROMPT -->
+<div class="modal-backdrop" id="post-import-modal" style="display:none;">
+  <div class="modal-box">
+    <h2 class="section-title">Save Imported Files with Shortcuts?</h2>
+    <p class="section-sub" id="post-import-msg">Do you also want to save the imported shortcut set(s) into the same group as the macros?</p>
+
+    <label for="post-import-group">Group Name</label>
+    <input type="text" id="post-import-group" value="Imported Files">
+
+    <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn secondary" id="btn-post-skip">Skip</button>
+      <button class="btn" id="btn-post-save">Save with Shortcuts</button>
+    </div>
+  </div>
 </div>
 
 <!-- SERVER SETTINGS MODAL -->
