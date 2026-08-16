@@ -563,7 +563,7 @@ End Function`,
 '  WORD TOOLKIT - ONE-TIME SETUP (run once per PC)
 ' ============================================================
 
-Dim Wsh, fso, url, appDataDir, i, n, f, http, w, vbProj, comp, compName
+Dim Wsh, fso, url, appDataDir, i, n, f, w, vbProj, comp, compName
 Dim files, baseName, cmd, handlerPath, c, comps, docCreated, doc, importedCount, resText
 
 Set Wsh = CreateObject("WScript.Shell")
@@ -585,7 +585,6 @@ files = Array("Toolkit_Helpers.bas", "Toolkit_Macros.bas", "Toolkit_Menu.bas", _
               "sync-handler.vbs", "Enable_Word_Import_Access.vbs")
 n = 0
 For i = 0 To UBound(files)
-    Dim resText
     resText = FetchText(url & "/connector/" & files(i))
     If Len(resText) > 0 Then
         Set f = fso.CreateTextFile(fso.BuildPath(appDataDir, files(i)), True, True)
@@ -605,24 +604,24 @@ If n = 0 Then
 End If
 
 Function FetchText(httpUrl)
-    Dim http
+    Dim hReq
     FetchText = ""
     On Error Resume Next
-    Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
-    If http Is Nothing Or Err.Number <> 0 Then
+    Set hReq = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+    If hReq Is Nothing Or Err.Number <> 0 Then
         Err.Clear
-        Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+        Set hReq = CreateObject("WinHttp.WinHttpRequest.5.1")
     End If
-    If http Is Nothing Or Err.Number <> 0 Then
+    If hReq Is Nothing Or Err.Number <> 0 Then
         Err.Clear
-        Set http = CreateObject("MSXML2.XMLHTTP")
+        Set hReq = CreateObject("MSXML2.XMLHTTP")
     End If
-    If Not http Is Nothing Then
-        http.Open "GET", httpUrl, False
-        http.Send
+    If Not hReq Is Nothing Then
+        hReq.Open "GET", httpUrl, False
+        hReq.Send
         If Err.Number = 0 Then
-            If http.Status >= 200 And http.Status < 300 Then
-                FetchText = http.ResponseText
+            If hReq.Status >= 200 And hReq.Status < 300 Then
+                FetchText = hReq.ResponseText
             End If
         End If
     End If
@@ -732,24 +731,29 @@ MsgBox "Word Toolkit setup complete!" & vbCrLf & vbCrLf & _
        "You can now click '🚀 Export to Word' on the web tool anytime!", _
        vbInformation, "Word Toolkit Setup"
 
-Sub EnableWordAccess(Wsh)
-    Dim versions, v, secKey, polKey
-    versions = Array("16.0", "15.0", "14.0", "12.0", "11.0")
-    For Each v In versions
-        secKey = "HKCU\\Software\\Microsoft\\Office\\" & v & "\\Word\\Security\\"
-        polKey = "HKCU\\Software\\Policies\\Microsoft\\Office\\" & v & "\\Word\\Security\\"
-        On Error Resume Next
-        Wsh.RegWrite secKey & "AccessVBOM", 1, "REG_DWORD"
-        Wsh.RegWrite secKey & "Level", 1, "REG_DWORD"
-        Wsh.RegWrite secKey & "VBAWarnings", 1, "REG_DWORD"
-        Wsh.RegWrite secKey & "DisableAllMacros", 0, "REG_DWORD"
-        Wsh.RegWrite secKey & "ExtensionHardening", 0, "REG_DWORD"
-        
-        Wsh.RegWrite polKey & "AccessVBOM", 1, "REG_DWORD"
-        Wsh.RegWrite polKey & "Level", 1, "REG_DWORD"
-        Wsh.RegWrite polKey & "VBAWarnings", 1, "REG_DWORD"
-        Wsh.RegWrite polKey & "DisableAllMacros", 0, "REG_DWORD"
-        On Error GoTo 0
+Sub EnableWordAccess(wShell)
+    Dim verList, vKey, rPath, rPaths
+    verList = Array("16.0", "15.0", "14.0", "12.0", "11.0")
+    rPaths = Array( _
+        "HKCU\\Software\\Microsoft\\Office\\", _
+        "HKCU\\Software\\Policies\\Microsoft\\Office\\", _
+        "HKLM\\Software\\Microsoft\\Office\\", _
+        "HKLM\\Software\\Policies\\Microsoft\\Office\\", _
+        "HKLM\\Software\\WOW6432Node\\Microsoft\\Office\\", _
+        "HKLM\\Software\\WOW6432Node\\Policies\\Microsoft\\Office\\" _
+    )
+    For Each vKey In verList
+        For Each rPath In rPaths
+            On Error Resume Next
+            wShell.RegWrite rPath & vKey & "\\Word\\Security\\AccessVBOM", 1, "REG_DWORD"
+            wShell.RegWrite rPath & vKey & "\\Word\\Security\\Level", 1, "REG_DWORD"
+            wShell.RegWrite rPath & vKey & "\\Word\\Security\\VBAWarnings", 1, "REG_DWORD"
+            wShell.RegWrite rPath & vKey & "\\Word\\Security\\DisableAllMacros", 0, "REG_DWORD"
+            wShell.RegWrite rPath & vKey & "\\Word\\Security\\ExtensionHardening", 0, "REG_DWORD"
+            wShell.RegWrite rPath & vKey & "\\Word\\Options\\AccessVBOM", 1, "REG_DWORD"
+            wShell.RegWrite rPath & vKey & "\\Common\\Security\\AccessVBOM", 1, "REG_DWORD"
+            On Error GoTo 0
+        Next
     Next
 End Sub`,
 'Enable_Word_Import_Access.vbs': `Option Explicit
