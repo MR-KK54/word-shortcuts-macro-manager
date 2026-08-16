@@ -173,6 +173,17 @@
 
         <div class="io-card">
           <div>
+            <h3>⚡ Direct Word Sync Bundles</h3>
+            <p>Download the plain-text bundles the VBA connector installs directly into Word (macros = VBA modules, shortcuts = key bindings).</p>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="#!" class="btn secondary" id="io-sync-macros" style="text-decoration:none;">Macro Bundle (.txt)</a>
+            <a href="#!" class="btn secondary" id="io-sync-shortcuts" style="text-decoration:none;">Shortcut Bundle (.csv)</a>
+          </div>
+        </div>
+
+        <div class="io-card">
+          <div>
             <h3>📁 Download Full Project (.zip)</h3>
             <p>Download the complete source code, backend server, VBA connector scripts, and configuration packaged into a .zip file ready to deploy on Render or run locally.</p>
           </div>
@@ -195,14 +206,14 @@
     <section id="tab-connector" class="tab-content" style="display:none;">
       <h2 class="section-title">Word Connector Setup (VBA)</h2>
       <p class="section-sub" style="max-width:640px;">
-        To connect Microsoft Word on your computer with this manager, import these 5 VBA connector files into Word's VBA editor (Alt+F11). When importing macros into Word, existing modules with the same name are automatically replaced!
+        To connect Microsoft Word on your computer with this manager, import these VBA connector files into Word's VBA editor (Alt+F11). When importing macros into Word, existing modules with the same name are automatically replaced!
       </p>
 
       <ol class="connector-steps">
-        <li>Download the five <code>.bas</code> files below.</li>
+        <li>Download the six <code>.bas</code> files below.</li>
         <li>In Microsoft Word, press <strong>Alt+F11</strong> to open the VBA Editor, then click <strong>File → Import File</strong> for each module.</li>
         <li>Enable <em>"Trust access to the VBA project object model"</em> under Word File → Options → Trust Center → Trust Center Settings → Macro Settings.</li>
-        <li>Press <strong>Alt+F8</strong> and run <code>ShowToolkitMenu</code> anytime to export/import macros with automatic replacement of existing files.</li>
+        <li>Press <strong>Alt+F8</strong> and run <code>ShowToolkitMenu</code> anytime. Pick <strong>7 - Direct Sync ALL From Server</strong> to install every macro and keyboard shortcut straight into Word from this server (no file dialogs).</li>
       </ol>
 
       <h2 class="section-title">Download Connector Files</h2>

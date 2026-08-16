@@ -9,8 +9,9 @@ Sub ShowToolkitMenu()
           "  3 - Export Keyboard Shortcuts (.CSV)" & vbCrLf & _
           "  4 - Import Keyboard Shortcuts (.CSV)" & vbCrLf & _
           "  5 - Export Ribbon / QAT Customizations" & vbCrLf & _
-          "  6 - Import Ribbon / QAT Customizations" & vbCrLf & vbCrLf & _
-          "Enter a option number (1-6) or click Cancel:"
+          "  6 - Import Ribbon / QAT Customizations" & vbCrLf & _
+          "  7 - Direct Sync ALL From Server" & vbCrLf & vbCrLf & _
+          "Enter an option number (1-7) or click Cancel:"
     choice = InputBox(msg, "Word Customization Toolkit")
     Select Case choice
         Case "1": ExportAllMacros
@@ -19,8 +20,9 @@ Sub ShowToolkitMenu()
         Case "4": ImportKeyboardShortcuts
         Case "5": ExportRibbonCustomizations
         Case "6": ImportRibbonCustomizations
+        Case "7": SyncAllFromServer
         Case ""
         Case Else
-            MsgBox "Please enter a number from 1 to 6.", vbExclamation, "Word Customization Toolkit"
+            MsgBox "Please enter a number from 1 to 7.", vbExclamation, "Word Customization Toolkit"
     End Select
 End Sub

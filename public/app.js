@@ -17,10 +17,11 @@ const CONNECTOR_FILES = {
 'Toolkit_Helpers.bas': `Attribute VB_Name = "Toolkit_Helpers"
 Option Explicit
 
+' Helper function to prompt user for a folder path
 Function GetFolder(promptText As String) As String
     Dim fd As Object
     On Error Resume Next
-    Set fd = Application.FileDialog(4)
+    Set fd = Application.FileDialog(4) ' 4 = msoFileDialogFolderPicker
     If Not fd Is Nothing Then
         fd.Title = promptText
         If fd.Show = -1 Then
@@ -29,8 +30,8 @@ Function GetFolder(promptText As String) As String
         End If
     End If
     GetFolder = ""
-End Function`,
-
+End Function
+`,
 'Toolkit_Macros.bas': `Attribute VB_Name = "Toolkit_Macros"
 Option Explicit
 
@@ -38,6 +39,7 @@ Const vbext_ct_StdModule = 1
 Const vbext_ct_ClassModule = 2
 Const vbext_ct_MSForm = 3
 
+' Export all macro modules from active Word VBA project to a folder
 Sub ExportAllMacros()
     Dim vbProj As Object, vbComp As Object
     Dim exportPath As String, ext As String, count As Integer
@@ -55,8 +57,9 @@ Sub ExportAllMacros()
             Case Else: ext = ""
         End Select
 
+        ' Do not export built-in document modules (e.g. ThisDocument) as standalone .bas
         If ext <> "" And vbComp.Name <> "ThisDocument" Then
-            vbComp.Export exportPath & "\\" & vbComp.Name & ext
+            vbComp.Export exportPath & "\" & vbComp.Name & ext
             count = count + 1
         End If
     Next vbComp
@@ -68,6 +71,8 @@ HandleErr:
     MsgBox "Could not export macros. Make sure 'Trust access to the VBA project object model' is enabled." & vbCrLf & "Error: " & Err.Description, vbCritical, "Export Macros Error"
 End Sub
 
+' Import macro modules from a folder into Word.
+' REQUIREMENT: If the macro module already exists in Word, replace it!
 Sub ImportAllMacros()
     Dim vbProj As Object, importPath As String
     Dim fso As Object, fld As Object, f As Object
@@ -87,7 +92,7 @@ Sub ImportAllMacros()
         If ext = "bas" Or ext = "cls" Or ext = "frm" Then
             compName = fso.GetBaseName(f.Name)
 
-            ' Replace existing macro module in Word if already present!
+            ' --- REQUIREMENT: Replace existing macro if already in Word ---
             On Error Resume Next
             Set existingComp = Nothing
             Set existingComp = vbProj.VBComponents(compName)
@@ -97,19 +102,88 @@ Sub ImportAllMacros()
             End If
             On Error GoTo HandleErr
 
+            ' Import new module version into Word
             vbProj.VBComponents.Import f.Path
             count = count + 1
         End If
     Next f
 
     MsgBox count & " macro module(s) imported (" & replacedCount & " existing module(s) replaced)." & vbCrLf & _
-           "Remember to save Normal.dotm or active template.", vbInformation, "Import Macros Successful"
+           "Remember to save Normal.dotm or your active template.", vbInformation, "Import Macros Successful"
     Exit Sub
 
 HandleErr:
     MsgBox "Could not import macros. Make sure 'Trust access to the VBA project object model' is enabled." & vbCrLf & "Error: " & Err.Description, vbCritical, "Import Macros Error"
-End Sub`,
+End Sub
+`,
+'Toolkit_Menu.bas': `Attribute VB_Name = "Toolkit_Menu"
+Option Explicit
 
+Sub ShowToolkitMenu()
+    Dim choice As String, msg As String
+    msg = "WORD CUSTOMIZATION TOOLKIT" & vbCrLf & vbCrLf & _
+          "  1 - Export Macros (To Files)" & vbCrLf & _
+          "  2 - Import Macros (Replace Existing)" & vbCrLf & _
+          "  3 - Export Keyboard Shortcuts (.CSV)" & vbCrLf & _
+          "  4 - Import Keyboard Shortcuts (.CSV)" & vbCrLf & _
+          "  5 - Export Ribbon / QAT Customizations" & vbCrLf & _
+          "  6 - Import Ribbon / QAT Customizations" & vbCrLf & _
+          "  7 - Direct Sync ALL From Server" & vbCrLf & vbCrLf & _
+          "Enter an option number (1-7) or click Cancel:"
+    choice = InputBox(msg, "Word Customization Toolkit")
+    Select Case choice
+        Case "1": ExportAllMacros
+        Case "2": ImportAllMacros
+        Case "3": ExportKeyboardShortcuts
+        Case "4": ImportKeyboardShortcuts
+        Case "5": ExportRibbonCustomizations
+        Case "6": ImportRibbonCustomizations
+        Case "7": SyncAllFromServer
+        Case ""
+        Case Else
+            MsgBox "Please enter a number from 1 to 7.", vbExclamation, "Word Customization Toolkit"
+    End Select
+End Sub
+`,
+'Toolkit_RibbonQAT.bas': `Attribute VB_Name = "Toolkit_RibbonQAT"
+Option Explicit
+
+Private Function OfficeUIPath() As String
+    OfficeUIPath = Environ$("LOCALAPPDATA") & "\Microsoft\Office\Word.officeUI"
+End Function
+
+Sub ExportRibbonCustomizations()
+    Dim srcFile As String, destFolder As String, fso As Object
+    srcFile = OfficeUIPath()
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FileExists(srcFile) Then
+        MsgBox "No custom ribbon/QAT file was found at:" & vbCrLf & srcFile & vbCrLf & vbCrLf & "Use File > Options > Customize Ribbon > Import/Export in Word instead.", vbExclamation, "Export Ribbon/QAT"
+        Exit Sub
+    End If
+    destFolder = GetFolder("Select a folder to export the ribbon/QAT customization to")
+    If destFolder = "" Then Exit Sub
+    On Error GoTo HandleErr
+    fso.CopyFile srcFile, destFolder & "\Word.officeUI", True
+    MsgBox "Ribbon and Quick Access Toolbar customizations exported to:" & vbCrLf & destFolder, vbInformation, "Export Ribbon/QAT"
+    Exit Sub
+HandleErr:
+    MsgBox "Could not export the ribbon/QAT file." & vbCrLf & "Error: " & Err.Description, vbCritical, "Export Ribbon/QAT Error"
+End Sub
+
+Sub ImportRibbonCustomizations()
+    Dim srcFile As Variant, destFile As String, fso As Object
+    srcFile = Application.GetOpenFilename("Office UI Files (*.officeUI), *.officeUI")
+    If srcFile = False Or srcFile = "False" Then Exit Sub
+    destFile = OfficeUIPath()
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    On Error GoTo HandleErr
+    fso.CopyFile srcFile, destFile, True
+    MsgBox "Ribbon/QAT customization imported. Close and reopen Word for changes to take effect.", vbInformation, "Import Ribbon/QAT"
+    Exit Sub
+HandleErr:
+    MsgBox "Could not import the ribbon/QAT file. If Word reports it is in use, close Word and copy it manually to:" & vbCrLf & destFile & vbCrLf & vbCrLf & "Error: " & Err.Description, vbCritical, "Import Ribbon/QAT Error"
+End Sub
+`,
 'Toolkit_Shortcuts.bas': `Attribute VB_Name = "Toolkit_Shortcuts"
 Option Explicit
 
@@ -147,7 +221,7 @@ Sub ImportKeyboardShortcuts()
 
     fnum = FreeFile
     Open filePath For Input As #fnum
-    If Not EOF(fnum) Then Line Input #fnum, ln
+    If Not EOF(fnum) Then Line Input #fnum, ln ' skip header
 
     Application.CustomizationContext = NormalTemplate
 
@@ -180,73 +254,189 @@ Sub ResetAllKeyboardShortcuts()
         Application.KeyBindings.ClearAll
         MsgBox "Keyboard shortcuts reset to Word defaults.", vbInformation, "Reset Shortcuts"
     End If
-End Sub`,
-
-'Toolkit_RibbonQAT.bas': `Attribute VB_Name = "Toolkit_RibbonQAT"
+End Sub
+`,
+'Toolkit_Sync.bas': `Attribute VB_Name = "Toolkit_Sync"
 Option Explicit
 
-Private Function OfficeUIPath() As String
-    OfficeUIPath = Environ$("LOCALAPPDATA") & "\\Microsoft\\Office\\Word.officeUI"
+' ============================================================
+'  DIRECT WORD SYNC - installs macros & shortcuts from the
+'  server straight into Microsoft Word (no file dialogs).
+'  REQUIREMENT: Enable "Trust access to the VBA project object
+'  model" (File > Options > Trust Center > Macro Settings).
+' ============================================================
+
+Private Const DEFAULT_SERVER = "http://localhost:3000/api"
+
+' Ask once per session, remember the answer
+Private Function ServerBaseUrl() As String
+    Static sUrl As String
+    If sUrl = "" Then
+        sUrl = InputBox("Enter the Word Toolkit server URL (e.g. https://your-app.onrender.com/api):", _
+                        "Sync from Server", DEFAULT_SERVER)
+        If sUrl = "" Then Exit Function
+        If Right(sUrl, 1) = "/" Then sUrl = Left(sUrl, Len(sUrl) - 1)
+    End If
+    ServerBaseUrl = sUrl
 End Function
 
-Sub ExportRibbonCustomizations()
-    Dim srcFile As String, destFolder As String, fso As Object
-    srcFile = OfficeUIPath()
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FileExists(srcFile) Then
-        MsgBox "No custom ribbon/QAT file was found at:" & vbCrLf & srcFile & vbCrLf & vbCrLf & "Use File > Options > Customize Ribbon > Import/Export in Word instead.", vbExclamation, "Export Ribbon/QAT"
-        Exit Sub
+' Simple HTTP GET returning the response body as text
+Private Function HttpGetText(url As String) As String
+    Dim http As Object
+    On Error GoTo HttpErr
+    Set http = CreateObject("MSXML2.XMLHTTP")
+    http.Open "GET", url, False
+    http.Send
+    If http.Status >= 200 And http.Status < 300 Then
+        HttpGetText = http.ResponseText
+    Else
+        HttpGetText = ""
+        MsgBox "Server returned status " & http.Status, vbExclamation, "Sync from Server"
     End If
-    destFolder = GetFolder("Select a folder to export the ribbon/QAT customization to")
-    If destFolder = "" Then Exit Sub
-    On Error GoTo HandleErr
-    fso.CopyFile srcFile, destFolder & "\\Word.officeUI", True
-    MsgBox "Ribbon and Quick Access Toolbar customizations exported to:" & vbCrLf & destFolder, vbInformation, "Export Ribbon/QAT"
-    Exit Sub
-HandleErr:
-    MsgBox "Could not export the ribbon/QAT file." & vbCrLf & "Error: " & Err.Description, vbCritical, "Export Ribbon/QAT Error"
+    Exit Function
+HttpErr:
+    MsgBox "Could not reach the server." & vbCrLf & "Check the URL and that you are online." & vbCrLf & "Error: " & Err.Description, vbCritical, "Sync from Server"
+    HttpGetText = ""
+End Function
+
+' --- MAIN ENTRY POINT: install all macros + all shortcuts ---
+Sub SyncAllFromServer()
+    Dim baseUrl As String, macMsg As String, scMsg As String
+    baseUrl = ServerBaseUrl()
+    If baseUrl = "" Then Exit Sub
+
+    macMsg = SyncMacrosFromServer(baseUrl)
+    scMsg = SyncShortcutsFromServer(baseUrl)
+
+    MsgBox "Direct sync complete!" & vbCrLf & vbCrLf & _
+           macMsg & vbCrLf & scMsg & vbCrLf & vbCrLf & _
+           "Remember to save Normal.dotm or your active template.", _
+           vbInformation, "Word Toolkit Sync"
 End Sub
 
-Sub ImportRibbonCustomizations()
-    Dim srcFile As Variant, destFile As String, fso As Object
-    srcFile = Application.GetOpenFilename("Office UI Files (*.officeUI), *.officeUI")
-    If srcFile = False Or srcFile = "False" Then Exit Sub
-    destFile = OfficeUIPath()
-    Set fso = CreateObject("Scripting.FileSystemObject")
+' --- MACROS ---
+Public Function SyncMacrosFromServer(baseUrl As String) As String
+    Dim bundle As String, vbProj As Object, count As Integer, replacedCount As Integer
+    Dim groupName As String, compName As String, compType As String, code As String
+    Dim lines() As String, i As Long, inMacro As Boolean
+    Dim fso As Object, tmpFile As String, fnum As Integer, existingComp As Object
+    Dim ln As String
+
     On Error GoTo HandleErr
-    fso.CopyFile srcFile, destFile, True
-    MsgBox "Ribbon/QAT customization imported. Close and reopen Word for changes to take effect.", vbInformation, "Import Ribbon/QAT"
-    Exit Sub
+
+    bundle = HttpGetText(baseUrl & "/sync/macros")
+    If bundle = "" Then
+        SyncMacrosFromServer = "Macros: not synced (no data or server unreachable)."
+        Exit Function
+    End If
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set vbProj = Application.VBE.ActiveVBProject
+
+    lines = Split(bundle, vbLf)
+    inMacro = False
+    code = ""
+    groupName = ""
+    compName = ""
+    compType = "bas"
+
+    For i = 0 To UBound(lines)
+        ln = Trim(lines(i))
+        If ln = "#WTMACRO-END#" Then
+            ' close current macro and install it
+            If inMacro And compName <> "" And Len(code) > 0 Then
+                tmpFile = Environ$("TEMP") & "\wtk_" & compName & "." & compType
+                fnum = FreeFile
+                Open tmpFile For Output As #fnum
+                Print #fnum, code
+                Close #fnum
+
+                ' Replace existing module with same name
+                On Error Resume Next
+                Set existingComp = vbProj.VBComponents(compName)
+                If Not existingComp Is Nothing Then
+                    vbProj.VBComponents.Remove existingComp
+                    replacedCount = replacedCount + 1
+                End If
+                On Error GoTo HandleErr
+
+                vbProj.VBComponents.Import tmpFile
+                fso.DeleteFile tmpFile, True
+                count = count + 1
+            End If
+            inMacro = False
+            code = ""
+            compName = ""
+            groupName = ""
+            compType = "bas"
+        ElseIf Left(ln, 7) = "@group=" Then
+            groupName = Mid(ln, 8)
+        ElseIf Left(ln, 6) = "@name=" Then
+            compName = Mid(ln, 7)
+            inMacro = True
+        ElseIf Left(ln, 6) = "@type=" Then
+            compType = LCase(Mid(ln, 7))
+        ElseIf inMacro Then
+            ' code line
+            code = code & lines(i) & vbCrLf
+        End If
+    Next i
+
+    SyncMacrosFromServer = "Macros: " & count & " installed (" & replacedCount & " replaced)."
+    Exit Function
+
 HandleErr:
-    MsgBox "Could not import the ribbon/QAT file." & vbCrLf & "Error: " & Err.Description, vbCritical, "Import Ribbon/QAT Error"
-End Sub`,
+    MsgBox "Could not install macros. Enable 'Trust access to the VBA project object model'." & vbCrLf & _
+           "Error: " & Err.Description, vbCritical, "Sync Macros Error"
+    SyncMacrosFromServer = "Macros: failed with error."
+End Function
 
-'Toolkit_Menu.bas': `Attribute VB_Name = "Toolkit_Menu"
-Option Explicit
+' --- SHORTCUTS ---
+Public Function SyncShortcutsFromServer(baseUrl As String) As String
+    Dim csvData As String, lines() As String, i As Long
+    Dim parts() As String, count As Integer, failCount As Integer
+    Dim ln As String, setCount As Integer
 
-Sub ShowToolkitMenu()
-    Dim choice As String, msg As String
-    msg = "WORD CUSTOMIZATION TOOLKIT" & vbCrLf & vbCrLf & _
-          "  1 - Export Macros (To Files)" & vbCrLf & _
-          "  2 - Import Macros (Replace Existing)" & vbCrLf & _
-          "  3 - Export Keyboard Shortcuts (.CSV)" & vbCrLf & _
-          "  4 - Import Keyboard Shortcuts (.CSV)" & vbCrLf & _
-          "  5 - Export Ribbon / QAT Customizations" & vbCrLf & _
-          "  6 - Import Ribbon / QAT Customizations" & vbCrLf & vbCrLf & _
-          "Enter an option number (1-6):"
-    choice = InputBox(msg, "Word Customization Toolkit")
-    Select Case choice
-        Case "1": ExportAllMacros
-        Case "2": ImportAllMacros
-        Case "3": ExportKeyboardShortcuts
-        Case "4": ImportKeyboardShortcuts
-        Case "5": ExportRibbonCustomizations
-        Case "6": ImportRibbonCustomizations
-        Case ""
-        Case Else
-            MsgBox "Please enter a number from 1 to 6.", vbExclamation, "Word Customization Toolkit"
-    End Select
-End Sub`
+    On Error GoTo HandleErr
+
+    csvData = HttpGetText(baseUrl & "/sync/shortcuts")
+    If csvData = "" Then
+        SyncShortcutsFromServer = "Shortcuts: not synced (no data or server unreachable)."
+        Exit Function
+    End If
+
+    Application.CustomizationContext = NormalTemplate
+    lines = Split(csvData, vbLf)
+
+    For i = 0 To UBound(lines)
+        ln = Trim(lines(i))
+        If ln = "" Then
+            ' skip
+        ElseIf Left(ln, 5) = "#SET:" Then
+            setCount = setCount + 1
+        ElseIf Left(ln, 11) = "KeyCategory" Then
+            ' header - skip
+        Else
+            parts = Split(ln, ",")
+            If UBound(parts) >= 3 Then
+                On Error Resume Next
+                Err.Clear
+                Application.KeyBindings.Add KeyCategory:=CLng(parts(0)), Command:=parts(1), _
+                    KeyCode:=CLng(parts(2)), KeyCode2:=IIf(parts(3) = "0" Or parts(3) = "", 0, CLng(parts(3)))
+                If Err.Number = 0 Then count = count + 1 Else failCount = failCount + 1
+                On Error GoTo HandleErr
+            End If
+        End If
+    Next i
+
+    SyncShortcutsFromServer = "Shortcuts: " & count & " applied from " & setCount & " set(s)" & _
+                              IIf(failCount > 0, " (" & failCount & " failed).", ".")
+    Exit Function
+
+HandleErr:
+    MsgBox "Could not apply keyboard shortcuts." & vbCrLf & "Error: " & Err.Description, vbCritical, "Sync Shortcuts Error"
+    SyncShortcutsFromServer = "Shortcuts: failed with error."
+End Function`
 };
 
 /* ---------- DOM LOAD & EVENT LISTENERS ---------- */
@@ -761,6 +951,29 @@ async function deleteRibbon(id) {
 }
 
 /* ---------- IMPORT / EXPORT HUB ---------- */
+
+// Direct Word Sync bundle downloads
+$('#io-sync-macros').addEventListener('click', (e) => {
+  e.preventDefault();
+  if (isServerOnline) {
+    window.location.href = `${apiBaseUrl}/sync/macros`;
+  } else {
+    const bundle = currentMacros.map(m => `@group=${m.group || 'General'}\n@name=${m.name}\n@type=${(m.type || 'bas').toLowerCase()}\n${m.code}\n#WTMACRO-END#\n`).join('');
+    downloadFile('word-toolkit-macro-bundle.txt', 'WORDTOOLKIT MACRO BUNDLE v1\n' + bundle);
+    showToast('Downloaded local macro bundle');
+  }
+});
+
+$('#io-sync-shortcuts').addEventListener('click', (e) => {
+  e.preventDefault();
+  if (isServerOnline) {
+    window.location.href = `${apiBaseUrl}/sync/shortcuts`;
+  } else {
+    const sets = currentShortcuts.map(sc => `#SET:${sc.name}${sc.group && sc.group !== 'General' ? ` (${sc.group})` : ''}\n${sc.csv}\n`).join('');
+    downloadFile('word-toolkit-shortcut-bundle.csv', sets);
+    showToast('Downloaded local shortcut bundle');
+  }
+});
 
 // Export full backup JSON
 $('#io-export-all').addEventListener('click', async () => {

@@ -279,6 +279,37 @@ app.delete('/api/ribbon/:id', (req, res) => {
 
 // --- SYSTEM IMPORT / EXPORT API ---
 
+// --- DIRECT WORD SYNC BUNDLES (plain text, VBA-friendly) ---
+// All macros in a parseable bundle so the VBA connector can install them into Word directly
+app.get('/api/sync/macros', (req, res) => {
+  const db = readDB();
+  let out = 'WORDTOOLKIT MACRO BUNDLE v1\n';
+  (db.macros || []).forEach(m => {
+    out += `@group=${m.group || 'General'}\n`;
+    out += `@name=${m.name}\n`;
+    out += `@type=${(m.type || 'bas').toLowerCase()}\n`;
+    out += (m.code || '') + '\n';
+    out += '#WTMACRO-END#\n';
+  });
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(out);
+});
+
+// All shortcut sets combined as CSV so the VBA connector can apply them to Word directly
+app.get('/api/sync/shortcuts', (req, res) => {
+  const db = readDB();
+  let out = '';
+  (db.shortcuts || []).forEach(sc => {
+    out += `#SET:${sc.name}${sc.group && sc.group !== 'General' ? ` (${sc.group})` : ''}\n`;
+    if (!/^KeyCategory/i.test((sc.csv || '').trim())) {
+      out += 'KeyCategory,Command,KeyCode,KeyCode2,KeyString\n';
+    }
+    out += (sc.csv || '') + '\n';
+  });
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(out);
+});
+
 // Export full backup as JSON
 app.get('/api/export', (req, res) => {
   const db = readDB();
