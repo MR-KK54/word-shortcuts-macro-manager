@@ -122,6 +122,39 @@ async function runTests() {
     assert.strictEqual(res6.data.success, true);
     console.log('  ✅ PASSED: System Export & Import package verified');
 
+    // 6. Sync: Macro bundle filtered by group
+    console.log('\nTest 6: Sync Macro Bundle with Group Filter');
+    const res6b = await request('GET', '/api/sync/macros?group=Legal%20Automation');
+    assert.strictEqual(res6b.status, 200);
+    assert.ok(res6b.raw.includes('@name=AddSignatureBlock'), 'bundle should contain the group macro');
+    assert.ok(!res6b.raw.includes('@name=CleanFormatting'), 'bundle should exclude other groups');
+    console.log('  ✅ PASSED: Macro bundle group filter verified');
+
+    // 7. Sync: Shortcut bundle group filter (Kishore set seeded default)
+    console.log('\nTest 7: Sync Shortcut Bundle with Group Filter');
+    const res7 = await request('GET', '/api/sync/shortcuts?group=Kishore');
+    assert.strictEqual(res7.status, 200);
+    assert.ok(res7.raw.includes('#SET:Kishore'), 'bundle should contain the Kishore set');
+    assert.ok(res7.raw.includes('KeyCategory'), 'bundle should contain CSV headers');
+    console.log('  ✅ PASSED: Shortcut bundle group filter verified');
+
+    // 8. Sync: Ribbon bundle
+    console.log('\nTest 8: Sync Ribbon Bundle');
+    const res8a = await request('POST', '/api/ribbon', {
+      name: 'Legal Ribbon',
+      group: 'Legal Automation',
+      filename: 'Word.officeUI',
+      base64: Buffer.from('<mso:customUI xmlns:mso="urn:custom-ui">TEST</mso:customUI>').toString('base64')
+    });
+    assert.strictEqual(res8a.status, 200);
+    const res8 = await request('GET', '/api/sync/ribbon?group=Legal%20Automation');
+    assert.strictEqual(res8.status, 200);
+    assert.ok(res8.raw.includes('#RIBBON:Legal Ribbon'), 'ribbon bundle should mark the profile');
+    assert.ok(res8.raw.includes('customUI'), 'ribbon bundle should contain the XML text');
+    const res8b = await request('GET', '/api/sync/ribbon?group=NoSuchGroup');
+    assert.ok(!res8b.raw.includes('#RIBBON:'), 'filtered ribbon bundle should be empty');
+    console.log('  ✅ PASSED: Ribbon bundle + group filter verified');
+
     console.log('\n====================================================');
     console.log('🎉 ALL API TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================');

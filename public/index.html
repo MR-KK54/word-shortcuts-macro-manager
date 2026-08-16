@@ -174,9 +174,10 @@
         <div class="io-card">
           <div>
             <h3>⚡ Direct Word Sync Bundles</h3>
-            <p>Download the plain-text bundles the VBA connector installs directly into Word (macros = VBA modules, shortcuts = key bindings).</p>
+            <p>Download the plain-text bundles the VBA connector installs directly into Word (macros = VBA modules, shortcuts = key bindings, ribbons = Word.officeUI).</p>
           </div>
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <a href="#!" class="btn" id="io-export-word" style="text-decoration:none;">🚀 Export to Word…</a>
             <a href="#!" class="btn secondary" id="io-sync-macros" style="text-decoration:none;">Macro Bundle (.txt)</a>
             <a href="#!" class="btn secondary" id="io-sync-shortcuts" style="text-decoration:none;">Shortcut Bundle (.csv)</a>
           </div>
@@ -234,6 +235,43 @@
     <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
       <button class="btn secondary" id="btn-preview-cancel">Cancel</button>
       <button class="btn" id="btn-preview-start">Start Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT TO WORD DIALOG -->
+<div class="modal-backdrop" id="export-word-modal" style="display:none;">
+  <div class="modal-box">
+    <h2 class="section-title">🚀 Export Directly to MS Word</h2>
+    <p class="section-sub">Choose which groups to install into Word. You get one installer module that fetches the selections from this server — import it in Word (Alt+F8 → run <code>SyncAllFromServer</code>).</p>
+
+    <div class="ew-row">
+      <label class="ew-check"><input type="checkbox" id="ew-macros" checked> <strong>Macros</strong></label>
+      <select id="ew-macro-group">
+        <option value="">All macro groups</option>
+      </select>
+    </div>
+    <div class="ew-row">
+      <label class="ew-check"><input type="checkbox" id="ew-shortcuts" checked> <strong>Shortcuts</strong></label>
+      <select id="ew-shortcut-group">
+        <option value="">All shortcut groups</option>
+      </select>
+    </div>
+    <div class="ew-row">
+      <label class="ew-check"><input type="checkbox" id="ew-ribbon" checked> <strong>Ribbon</strong></label>
+      <select id="ew-ribbon-group">
+        <option value="">All ribbon groups</option>
+      </select>
+    </div>
+
+    <label for="ew-server-url" style="margin-top:16px;">Server API Base URL (baked into the installer)</label>
+    <input type="text" id="ew-server-url" value="/api">
+
+    <p style="font-size:12px; color:var(--ink-soft); margin-top:10px;">Requires <strong>"Trust access to the VBA project object model"</strong> (File &gt; Options &gt; Trust Center &gt; Macro Settings). Ribbon installs to <code>%APPDATA%\Microsoft\Office\Word.officeUI</code> — restart Word to apply.</p>
+
+    <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn secondary" id="btn-close-export-word">Cancel</button>
+      <button class="btn" id="btn-generate-installer">Generate Word Installer (.bas)</button>
     </div>
   </div>
 </div>

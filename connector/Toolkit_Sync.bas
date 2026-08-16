@@ -2,24 +2,53 @@ Attribute VB_Name = "Toolkit_Sync"
 Option Explicit
 
 ' ============================================================
-'  DIRECT WORD SYNC - installs macros & shortcuts from the
-'  server straight into Microsoft Word (no file dialogs).
+'  DIRECT WORD SYNC - installs macros, keyboard shortcuts and
+'  ribbon profiles from the server straight into Microsoft Word
+'  (no file dialogs).
 '  REQUIREMENT: Enable "Trust access to the VBA project object
 '  model" (File > Options > Trust Center > Macro Settings).
+'
+'  The web app's "Export to Word" dialog generates a customized
+'  copy of this module with the chosen group selections baked in
+'  below (@@placeholders@@ are replaced by the web app).
 ' ============================================================
 
-Private Const DEFAULT_SERVER = "http://localhost:3000/api"
+' --- INSTALLER SELECTIONS (replaced by the web app) ---
+' "" (empty) = sync ALL groups of that type.
+Private Const SYNC_MACROS As Boolean = True
+Private Const SYNC_SHORTCUTS As Boolean = True
+Private Const SYNC_RIBBON As Boolean = True
+Private Const DEFAULT_SERVER As String = "@@SERVER_URL@@"
+Private Const SELECTED_MACRO_GROUP As String = "@@MACRO_GROUP@@"
+Private Const SELECTED_SHORTCUT_GROUP As String = "@@SHORTCUT_GROUP@@"
+Private Const SELECTED_RIBBON_GROUP As String = "@@RIBBON_GROUP@@"
 
 ' Ask once per session, remember the answer
 Private Function ServerBaseUrl() As String
     Static sUrl As String
+    Dim defUrl As String
     If sUrl = "" Then
+        defUrl = DEFAULT_SERVER
+        If defUrl = "" Or InStr(defUrl, "@@") > 0 Then defUrl = "http://localhost:3000/api"
         sUrl = InputBox("Enter the Word Toolkit server URL (e.g. https://your-app.onrender.com/api):", _
-                        "Sync from Server", DEFAULT_SERVER)
+                        "Sync from Server", defUrl)
         If sUrl = "" Then Exit Function
         If Right(sUrl, 1) = "/" Then sUrl = Left(sUrl, Len(sUrl) - 1)
     End If
     ServerBaseUrl = sUrl
+End Function
+
+' Returns the URL-encoded group filter for a synced section
+Private Function GroupFilter(section As String) As String
+    Dim grp As String
+    grp = SELECTED_MACRO_GROUP
+    If section = "shortcuts" Then grp = SELECTED_SHORTCUT_GROUP
+    If section = "ribbon" Then grp = SELECTED_RIBBON_GROUP
+    If grp = "" Or InStr(grp, "@@") > 0 Then
+        GroupFilter = ""
+    Else
+        GroupFilter = "?group=" & Replace(grp, " ", "%20")
+    End If
 End Function
 
 ' Simple HTTP GET returning the response body as text
@@ -41,17 +70,21 @@ HttpErr:
     HttpGetText = ""
 End Function
 
-' --- MAIN ENTRY POINT: install all macros + all shortcuts ---
+' --- MAIN ENTRY POINT: install macros + shortcuts + ribbon of the selected groups ---
 Sub SyncAllFromServer()
-    Dim baseUrl As String, macMsg As String, scMsg As String
+    Dim baseUrl As String, macMsg As String, scMsg As String, rbMsg As String
     baseUrl = ServerBaseUrl()
     If baseUrl = "" Then Exit Sub
 
-    macMsg = SyncMacrosFromServer(baseUrl)
-    scMsg = SyncShortcutsFromServer(baseUrl)
+    macMsg = "Macros: skipped."
+    If SYNC_MACROS Then macMsg = SyncMacrosFromServer(baseUrl)
+    scMsg = "Shortcuts: skipped."
+    If SYNC_SHORTCUTS Then scMsg = SyncShortcutsFromServer(baseUrl)
+    rbMsg = "Ribbon: skipped."
+    If SYNC_RIBBON Then rbMsg = SyncRibbonFromServer(baseUrl)
 
     MsgBox "Direct sync complete!" & vbCrLf & vbCrLf & _
-           macMsg & vbCrLf & scMsg & vbCrLf & vbCrLf & _
+           macMsg & vbCrLf & scMsg & vbCrLf & rbMsg & vbCrLf & vbCrLf & _
            "Remember to save Normal.dotm or your active template.", _
            vbInformation, "Word Toolkit Sync"
 End Sub
@@ -66,7 +99,7 @@ Public Function SyncMacrosFromServer(baseUrl As String) As String
 
     On Error GoTo HandleErr
 
-    bundle = HttpGetText(baseUrl & "/sync/macros")
+    bundle = HttpGetText(baseUrl & "/sync/macros" & GroupFilter("macros"))
     If bundle = "" Then
         SyncMacrosFromServer = "Macros: not synced (no data or server unreachable)."
         Exit Function
@@ -141,7 +174,7 @@ Public Function SyncShortcutsFromServer(baseUrl As String) As String
 
     On Error GoTo HandleErr
 
-    csvData = HttpGetText(baseUrl & "/sync/shortcuts")
+    csvData = HttpGetText(baseUrl & "/sync/shortcuts" & GroupFilter("shortcuts"))
     If csvData = "" Then
         SyncShortcutsFromServer = "Shortcuts: not synced (no data or server unreachable)."
         Exit Function
@@ -178,4 +211,71 @@ Public Function SyncShortcutsFromServer(baseUrl As String) As String
 HandleErr:
     MsgBox "Could not apply keyboard shortcuts." & vbCrLf & "Error: " & Err.Description, vbCritical, "Sync Shortcuts Error"
     SyncShortcutsFromServer = "Shortcuts: failed with error."
+End Function
+
+' --- RIBBON ---
+' Downloads the selected .officeUI profile(s) and writes the file to
+' Word's AppData folder. Word must be restarted to apply the ribbon.
+Public Function SyncRibbonFromServer(baseUrl As String) As String
+    Dim bundle As String, lines() As String, i As Long
+    Dim ln As String, fso As Object, folderPath As String, filePath As String
+    Dim fnum As Integer, xml As String, written As Integer, inRibbon As Boolean
+
+    On Error GoTo HandleErr
+
+    bundle = HttpGetText(baseUrl & "/sync/ribbon" & GroupFilter("ribbon"))
+    If bundle = "" Then
+        SyncRibbonFromServer = "Ribbon: not synced (no data or server unreachable)."
+        Exit Function
+    End If
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    folderPath = Environ$("APPDATA") & "\Microsoft\Office"
+    If Not fso.FolderExists(folderPath) Then fso.CreateFolder folderPath
+    filePath = folderPath & "\Word.officeUI"
+
+    lines = Split(bundle, vbLf)
+    inRibbon = False
+    xml = ""
+
+    For i = 0 To UBound(lines)
+        ln = Trim(lines(i))
+        If Left(ln, 8) = "#RIBBON:" Then
+            ' A new profile begins: flush the previous one first
+            If inRibbon And Len(xml) > 0 Then
+                fnum = FreeFile
+                Open filePath For Output As #fnum
+                Print #fnum, xml
+                Close #fnum
+                written = written + 1
+            End If
+            inRibbon = True
+            xml = ""
+        ElseIf ln = "#WTRIBBON-END#" Then
+            If inRibbon And Len(xml) > 0 Then
+                fnum = FreeFile
+                Open filePath For Output As #fnum
+                Print #fnum, xml
+                Close #fnum
+                written = written + 1
+            End If
+            inRibbon = False
+            xml = ""
+        ElseIf inRibbon Then
+            xml = xml & lines(i) & vbCrLf
+        End If
+    Next i
+
+    If written = 0 Then
+        SyncRibbonFromServer = "Ribbon: no profiles found."
+    Else
+        SyncRibbonFromServer = "Ribbon: " & written & " profile(s) written to Word.officeUI. " & _
+                               "Restart Word to apply."
+    End If
+    Exit Function
+
+HandleErr:
+    MsgBox "Could not install the ribbon profile." & vbCrLf & _
+           "Error: " & Err.Description, vbCritical, "Sync Ribbon Error"
+    SyncRibbonFromServer = "Ribbon: failed with error."
 End Function

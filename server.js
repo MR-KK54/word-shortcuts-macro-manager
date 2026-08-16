@@ -380,8 +380,11 @@ app.delete('/api/ribbon/:id', (req, res) => {
 // All macros in a parseable bundle so the VBA connector can install them into Word directly
 app.get('/api/sync/macros', (req, res) => {
   const db = readDB();
+  const { group } = req.query;
+  let list = db.macros || [];
+  if (group) list = list.filter(m => (m.group || 'General').toLowerCase() === group.toLowerCase());
   let out = 'WORDTOOLKIT MACRO BUNDLE v1\n';
-  (db.macros || []).forEach(m => {
+  list.forEach(m => {
     out += `@group=${m.group || 'General'}\n`;
     out += `@name=${m.name}\n`;
     out += `@type=${(m.type || 'bas').toLowerCase()}\n`;
@@ -395,13 +398,33 @@ app.get('/api/sync/macros', (req, res) => {
 // All shortcut sets combined as CSV so the VBA connector can apply them to Word directly
 app.get('/api/sync/shortcuts', (req, res) => {
   const db = readDB();
+  const { group } = req.query;
+  let list = db.shortcuts || [];
+  if (group) list = list.filter(s => (s.group || 'General').toLowerCase() === group.toLowerCase());
   let out = '';
-  (db.shortcuts || []).forEach(sc => {
+  list.forEach(sc => {
     out += `#SET:${sc.name}${sc.group && sc.group !== 'General' ? ` (${sc.group})` : ''}\n`;
     if (!/^KeyCategory/i.test((sc.csv || '').trim())) {
       out += 'KeyCategory,Command,KeyCode,KeyCode2,KeyString\n';
     }
     out += (sc.csv || '') + '\n';
+  });
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(out);
+});
+
+// Ribbon profiles as plain .officeUI XML so the VBA connector can write the file
+// directly into Word's AppData folder (one profile per machine - last one wins).
+app.get('/api/sync/ribbon', (req, res) => {
+  const db = readDB();
+  const { group } = req.query;
+  let list = db.ribbon || [];
+  if (group) list = list.filter(r => (r.group || 'General').toLowerCase() === group.toLowerCase());
+  let out = '';
+  list.forEach(r => {
+    out += `#RIBBON:${r.name}${r.group && r.group !== 'General' ? ` (${r.group})` : ''}\n`;
+    out += (r.base64 ? Buffer.from(r.base64, 'base64').toString('utf8') : '') + '\n';
+    out += '#WTRIBBON-END#\n';
   });
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.send(out);

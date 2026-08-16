@@ -260,24 +260,53 @@ End Sub
 Option Explicit
 
 ' ============================================================
-'  DIRECT WORD SYNC - installs macros & shortcuts from the
-'  server straight into Microsoft Word (no file dialogs).
+'  DIRECT WORD SYNC - installs macros, keyboard shortcuts and
+'  ribbon profiles from the server straight into Microsoft Word
+'  (no file dialogs).
 '  REQUIREMENT: Enable "Trust access to the VBA project object
 '  model" (File > Options > Trust Center > Macro Settings).
+'
+'  The web app's "Export to Word" dialog generates a customized
+'  copy of this module with the chosen group selections baked in
+'  below (@@placeholders@@ are replaced by the web app).
 ' ============================================================
 
-Private Const DEFAULT_SERVER = "http://localhost:3000/api"
+' --- INSTALLER SELECTIONS (replaced by the web app) ---
+' "" (empty) = sync ALL groups of that type.
+Private Const SYNC_MACROS As Boolean = True
+Private Const SYNC_SHORTCUTS As Boolean = True
+Private Const SYNC_RIBBON As Boolean = True
+Private Const DEFAULT_SERVER As String = "@@SERVER_URL@@"
+Private Const SELECTED_MACRO_GROUP As String = "@@MACRO_GROUP@@"
+Private Const SELECTED_SHORTCUT_GROUP As String = "@@SHORTCUT_GROUP@@"
+Private Const SELECTED_RIBBON_GROUP As String = "@@RIBBON_GROUP@@"
 
 ' Ask once per session, remember the answer
 Private Function ServerBaseUrl() As String
     Static sUrl As String
+    Dim defUrl As String
     If sUrl = "" Then
+        defUrl = DEFAULT_SERVER
+        If defUrl = "" Or InStr(defUrl, "@@") > 0 Then defUrl = "http://localhost:3000/api"
         sUrl = InputBox("Enter the Word Toolkit server URL (e.g. https://your-app.onrender.com/api):", _
-                        "Sync from Server", DEFAULT_SERVER)
+                        "Sync from Server", defUrl)
         If sUrl = "" Then Exit Function
         If Right(sUrl, 1) = "/" Then sUrl = Left(sUrl, Len(sUrl) - 1)
     End If
     ServerBaseUrl = sUrl
+End Function
+
+' Returns the URL-encoded group filter for a synced section
+Private Function GroupFilter(section As String) As String
+    Dim grp As String
+    grp = SELECTED_MACRO_GROUP
+    If section = "shortcuts" Then grp = SELECTED_SHORTCUT_GROUP
+    If section = "ribbon" Then grp = SELECTED_RIBBON_GROUP
+    If grp = "" Or InStr(grp, "@@") > 0 Then
+        GroupFilter = ""
+    Else
+        GroupFilter = "?group=" & Replace(grp, " ", "%20")
+    End If
 End Function
 
 ' Simple HTTP GET returning the response body as text
@@ -299,17 +328,21 @@ HttpErr:
     HttpGetText = ""
 End Function
 
-' --- MAIN ENTRY POINT: install all macros + all shortcuts ---
+' --- MAIN ENTRY POINT: install macros + shortcuts + ribbon of the selected groups ---
 Sub SyncAllFromServer()
-    Dim baseUrl As String, macMsg As String, scMsg As String
+    Dim baseUrl As String, macMsg As String, scMsg As String, rbMsg As String
     baseUrl = ServerBaseUrl()
     If baseUrl = "" Then Exit Sub
 
-    macMsg = SyncMacrosFromServer(baseUrl)
-    scMsg = SyncShortcutsFromServer(baseUrl)
+    macMsg = "Macros: skipped."
+    If SYNC_MACROS Then macMsg = SyncMacrosFromServer(baseUrl)
+    scMsg = "Shortcuts: skipped."
+    If SYNC_SHORTCUTS Then scMsg = SyncShortcutsFromServer(baseUrl)
+    rbMsg = "Ribbon: skipped."
+    If SYNC_RIBBON Then rbMsg = SyncRibbonFromServer(baseUrl)
 
     MsgBox "Direct sync complete!" & vbCrLf & vbCrLf & _
-           macMsg & vbCrLf & scMsg & vbCrLf & vbCrLf & _
+           macMsg & vbCrLf & scMsg & vbCrLf & rbMsg & vbCrLf & vbCrLf & _
            "Remember to save Normal.dotm or your active template.", _
            vbInformation, "Word Toolkit Sync"
 End Sub
@@ -324,7 +357,7 @@ Public Function SyncMacrosFromServer(baseUrl As String) As String
 
     On Error GoTo HandleErr
 
-    bundle = HttpGetText(baseUrl & "/sync/macros")
+    bundle = HttpGetText(baseUrl & "/sync/macros" & GroupFilter("macros"))
     If bundle = "" Then
         SyncMacrosFromServer = "Macros: not synced (no data or server unreachable)."
         Exit Function
@@ -345,7 +378,7 @@ Public Function SyncMacrosFromServer(baseUrl As String) As String
         If ln = "#WTMACRO-END#" Then
             ' close current macro and install it
             If inMacro And compName <> "" And Len(code) > 0 Then
-                tmpFile = Environ$("TEMP") & "\wtk_" & compName & "." & compType
+                tmpFile = Environ$("TEMP") & "\\wtk_" & compName & "." & compType
                 fnum = FreeFile
                 Open tmpFile For Output As #fnum
                 Print #fnum, code
@@ -399,7 +432,7 @@ Public Function SyncShortcutsFromServer(baseUrl As String) As String
 
     On Error GoTo HandleErr
 
-    csvData = HttpGetText(baseUrl & "/sync/shortcuts")
+    csvData = HttpGetText(baseUrl & "/sync/shortcuts" & GroupFilter("shortcuts"))
     If csvData = "" Then
         SyncShortcutsFromServer = "Shortcuts: not synced (no data or server unreachable)."
         Exit Function
@@ -436,6 +469,73 @@ Public Function SyncShortcutsFromServer(baseUrl As String) As String
 HandleErr:
     MsgBox "Could not apply keyboard shortcuts." & vbCrLf & "Error: " & Err.Description, vbCritical, "Sync Shortcuts Error"
     SyncShortcutsFromServer = "Shortcuts: failed with error."
+End Function
+
+' --- RIBBON ---
+' Downloads the selected .officeUI profile(s) and writes the file to
+' Word's AppData folder. Word must be restarted to apply the ribbon.
+Public Function SyncRibbonFromServer(baseUrl As String) As String
+    Dim bundle As String, lines() As String, i As Long
+    Dim ln As String, fso As Object, folderPath As String, filePath As String
+    Dim fnum As Integer, xml As String, written As Integer, inRibbon As Boolean
+
+    On Error GoTo HandleErr
+
+    bundle = HttpGetText(baseUrl & "/sync/ribbon" & GroupFilter("ribbon"))
+    If bundle = "" Then
+        SyncRibbonFromServer = "Ribbon: not synced (no data or server unreachable)."
+        Exit Function
+    End If
+
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    folderPath = Environ$("APPDATA") & "\\Microsoft\\Office"
+    If Not fso.FolderExists(folderPath) Then fso.CreateFolder folderPath
+    filePath = folderPath & "\\Word.officeUI"
+
+    lines = Split(bundle, vbLf)
+    inRibbon = False
+    xml = ""
+
+    For i = 0 To UBound(lines)
+        ln = Trim(lines(i))
+        If Left(ln, 8) = "#RIBBON:" Then
+            ' A new profile begins: flush the previous one first
+            If inRibbon And Len(xml) > 0 Then
+                fnum = FreeFile
+                Open filePath For Output As #fnum
+                Print #fnum, xml
+                Close #fnum
+                written = written + 1
+            End If
+            inRibbon = True
+            xml = ""
+        ElseIf ln = "#WTRIBBON-END#" Then
+            If inRibbon And Len(xml) > 0 Then
+                fnum = FreeFile
+                Open filePath For Output As #fnum
+                Print #fnum, xml
+                Close #fnum
+                written = written + 1
+            End If
+            inRibbon = False
+            xml = ""
+        ElseIf inRibbon Then
+            xml = xml & lines(i) & vbCrLf
+        End If
+    Next i
+
+    If written = 0 Then
+        SyncRibbonFromServer = "Ribbon: no profiles found."
+    Else
+        SyncRibbonFromServer = "Ribbon: " & written & " profile(s) written to Word.officeUI. " & _
+                               "Restart Word to apply."
+    End If
+    Exit Function
+
+HandleErr:
+    MsgBox "Could not install the ribbon profile." & vbCrLf & _
+           "Error: " & Err.Description, vbCritical, "Sync Ribbon Error"
+    SyncRibbonFromServer = "Ribbon: failed with error."
 End Function`
 };
 
@@ -1117,6 +1217,53 @@ $('#io-sync-shortcuts').addEventListener('click', async (e) => {
     downloadFile('word-toolkit-shortcut-bundle.csv', sets);
     showToast('Downloaded local shortcut bundle');
   }
+});
+
+// Export to Word: generate a customized installer with the user's group selections
+function populateExportWordGroups() {
+  const macroGroups = [...new Set(currentMacros.map(m => (m.group || 'General').trim()).filter(Boolean))].sort();
+  const shortcutGroups = [...new Set(currentShortcuts.map(s => (s.group || 'General').trim()).filter(Boolean))].sort();
+  const ribbonGroups = [...new Set(currentRibbon.map(r => (r.group || 'General').trim()).filter(Boolean))].sort();
+  const fill = (sel, groups) => {
+    const s = $(sel);
+    const prev = s.value;
+    s.innerHTML = '<option value="">All groups</option>' +
+      groups.map(g => `<option value="${escapeHtml(g)}"${g === prev ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('');
+    if (!groups.includes(prev)) s.value = '';
+  };
+  fill('#ew-macro-group', macroGroups);
+  fill('#ew-shortcut-group', shortcutGroups);
+  fill('#ew-ribbon-group', ribbonGroups);
+}
+
+$('#io-export-word').addEventListener('click', (e) => {
+  e.preventDefault();
+  populateExportWordGroups();
+  $('#ew-server-url').value = apiBaseUrl;
+  $('#export-word-modal').style.display = 'flex';
+});
+
+$('#btn-close-export-word').addEventListener('click', () => {
+  $('#export-word-modal').style.display = 'none';
+});
+
+$('#btn-generate-installer').addEventListener('click', () => {
+  let src = CONNECTOR_FILES['Toolkit_Sync.bas'];
+  const macroOn = $('#ew-macros').checked;
+  const scOn = $('#ew-shortcuts').checked;
+  const rbOn = $('#ew-ribbon').checked;
+  if (!macroOn) src = src.replace('Private Const SYNC_MACROS As Boolean = True', 'Private Const SYNC_MACROS As Boolean = False');
+  if (!scOn) src = src.replace('Private Const SYNC_SHORTCUTS As Boolean = True', 'Private Const SYNC_SHORTCUTS As Boolean = False');
+  if (!rbOn) src = src.replace('Private Const SYNC_RIBBON As Boolean = True', 'Private Const SYNC_RIBBON As Boolean = False');
+  const clean = v => (v || '').replace(/"/g, "'").replace(/[\r\n]+/g, ' ').trim();
+  src = src
+    .replace('@@SERVER_URL@@', clean($('#ew-server-url').value) || '/api')
+    .replace('@@MACRO_GROUP@@', macroOn ? clean($('#ew-macro-group').value) : '')
+    .replace('@@SHORTCUT_GROUP@@', scOn ? clean($('#ew-shortcut-group').value) : '')
+    .replace('@@RIBBON_GROUP@@', rbOn ? clean($('#ew-ribbon-group').value) : '');
+  downloadFile('WordToolkit_Install.bas', src);
+  showToast('Installer generated — import it in Word and run SyncAllFromServer');
+  $('#export-word-modal').style.display = 'none';
 });
 
 // Export full backup JSON

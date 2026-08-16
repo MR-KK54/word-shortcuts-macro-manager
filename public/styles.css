@@ -465,6 +465,11 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 
+/* Export to Word dialog */
+.ew-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+.ew-check { display: flex; align-items: center; gap: 6px; min-width: 110px; cursor: pointer; }
+.ew-row select { flex: 1; }
+
 .toast {
   position: fixed;
   bottom: 24px;
