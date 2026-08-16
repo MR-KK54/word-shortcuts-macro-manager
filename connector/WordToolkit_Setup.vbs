@@ -115,20 +115,35 @@ If w.Documents.Count = 0 Then
     On Error GoTo 0
 End If
 
-' Safely acquire Word's VB project
+' Safely acquire Word's VB project & components container
 Set vbProj = Nothing
+Set comps = Nothing
+
 On Error Resume Next
 Set vbProj = w.NormalTemplate.VBProject
-If vbProj Is Nothing Then Set vbProj = w.VBE.ActiveVBProject
-If vbProj Is Nothing And Not doc Is Nothing Then Set vbProj = doc.VBProject
+If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
+
+If comps Is Nothing And Not doc Is Nothing Then
+    Err.Clear
+    Set vbProj = doc.VBProject
+    If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
+End If
+
+If comps Is Nothing Then
+    Err.Clear
+    Set vbProj = w.VBE.ActiveVBProject
+    If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
+End If
 On Error GoTo 0
 
-If vbProj Is Nothing Then
-    MsgBox "Could not access Word's VBA project." & vbCrLf & vbCrLf & _
-           "Please enable VBA access in Word:" & vbCrLf & _
-           "Open Word -> File -> Options -> Trust Center -> Trust Center Settings -> Macro Settings" & vbCrLf & _
-           "-> Check 'Trust access to the VBA project object model' and click OK.", _
-           vbExclamation, "Word Toolkit Setup"
+If comps Is Nothing Then
+    MsgBox "Microsoft Word is blocking programmatic macro imports." & vbCrLf & vbCrLf & _
+           "To allow imports in 10 seconds:" & vbCrLf & _
+           "1. Open Microsoft Word" & vbCrLf & _
+           "2. Go to File -> Options -> Trust Center -> Trust Center Settings -> Macro Settings" & vbCrLf & _
+           "3. Check 'Trust access to the VBA project object model' and click OK" & vbCrLf & _
+           "4. Run this setup script again.", _
+           vbExclamation, "Word Toolkit Setup - Trust Access Required"
     If docCreated And Not doc Is Nothing Then
         On Error Resume Next
         doc.Close False
@@ -142,15 +157,15 @@ For i = 0 To UBound(files)
         baseName = Replace(files(i), ".bas", "")
         On Error Resume Next
         Set comp = Nothing
-        Set comp = vbProj.VBComponents(baseName)
-        If Not comp Is Nothing Then vbProj.VBComponents.Remove comp
+        Set comp = comps.Item(baseName)
+        If Not comp Is Nothing Then comps.Remove comp
         Err.Clear
-        vbProj.VBComponents.Import fso.BuildPath(appDataDir, files(i))
+        comps.Import fso.BuildPath(appDataDir, files(i))
         comp = Nothing
         If Err.Number <> 0 Then
             MsgBox "Importing " & files(i) & " failed." & vbCrLf & _
                    "Error (" & Err.Number & "): " & Err.Description & vbCrLf & vbCrLf & _
-                   "Please close Microsoft Word completely and run this setup script again.", _
+                   "Please make sure 'Trust access to the VBA project object model' is checked in Word Options -> Trust Center -> Macro Settings.", _
                    vbCritical, "Word Toolkit Setup"
             If docCreated And Not doc Is Nothing Then doc.Close False
             WScript.Quit
@@ -179,22 +194,27 @@ MsgBox "Word Toolkit setup complete!" & vbCrLf & vbCrLf & _
        vbInformation, "Word Toolkit Setup"
 
 Sub EnableWordAccess(Wsh)
-    Dim versions, v, secKey, polKey
+    Dim versions, v, root, roots
     versions = Array("16.0", "15.0", "14.0", "12.0", "11.0")
+    roots = Array( _
+        "HKCU\Software\Microsoft\Office\", _
+        "HKCU\Software\Policies\Microsoft\Office\", _
+        "HKLM\Software\Microsoft\Office\", _
+        "HKLM\Software\Policies\Microsoft\Office\", _
+        "HKLM\Software\WOW6432Node\Microsoft\Office\", _
+        "HKLM\Software\WOW6432Node\Policies\Microsoft\Office\" _
+    )
     For Each v In versions
-        secKey = "HKCU\Software\Microsoft\Office\" & v & "\Word\Security\"
-        polKey = "HKCU\Software\Policies\Microsoft\Office\" & v & "\Word\Security\"
-        On Error Resume Next
-        Wsh.RegWrite secKey & "AccessVBOM", 1, "REG_DWORD"
-        Wsh.RegWrite secKey & "Level", 1, "REG_DWORD"
-        Wsh.RegWrite secKey & "VBAWarnings", 1, "REG_DWORD"
-        Wsh.RegWrite secKey & "DisableAllMacros", 0, "REG_DWORD"
-        Wsh.RegWrite secKey & "ExtensionHardening", 0, "REG_DWORD"
-        
-        Wsh.RegWrite polKey & "AccessVBOM", 1, "REG_DWORD"
-        Wsh.RegWrite polKey & "Level", 1, "REG_DWORD"
-        Wsh.RegWrite polKey & "VBAWarnings", 1, "REG_DWORD"
-        Wsh.RegWrite polKey & "DisableAllMacros", 0, "REG_DWORD"
-        On Error GoTo 0
+        For Each root In roots
+            On Error Resume Next
+            Wsh.RegWrite root & v & "\Word\Security\AccessVBOM", 1, "REG_DWORD"
+            Wsh.RegWrite root & v & "\Word\Security\Level", 1, "REG_DWORD"
+            Wsh.RegWrite root & v & "\Word\Security\VBAWarnings", 1, "REG_DWORD"
+            Wsh.RegWrite root & v & "\Word\Security\DisableAllMacros", 0, "REG_DWORD"
+            Wsh.RegWrite root & v & "\Word\Security\ExtensionHardening", 0, "REG_DWORD"
+            Wsh.RegWrite root & v & "\Word\Options\AccessVBOM", 1, "REG_DWORD"
+            Wsh.RegWrite root & v & "\Common\Security\AccessVBOM", 1, "REG_DWORD"
+            On Error GoTo 0
+        Next
     Next
 End Sub

@@ -12,27 +12,38 @@ Option Explicit
 '   - ExtensionHardening = 0
 ' ============================================================
 
-Dim Wsh, versions, v, secKey, successCount, errCount
+Dim Wsh, versions, v, root, roots, successCount, errCount
 
 Set Wsh = CreateObject("WScript.Shell")
 versions = Array("16.0", "15.0", "14.0", "12.0", "11.0")
+roots = Array( _
+    "HKCU\Software\Microsoft\Office\", _
+    "HKCU\Software\Policies\Microsoft\Office\", _
+    "HKLM\Software\Microsoft\Office\", _
+    "HKLM\Software\Policies\Microsoft\Office\", _
+    "HKLM\Software\WOW6432Node\Microsoft\Office\", _
+    "HKLM\Software\WOW6432Node\Policies\Microsoft\Office\" _
+)
 successCount = 0
 errCount = 0
 
 For Each v In versions
-    secKey = "HKCU\Software\Microsoft\Office\" & v & "\Word\Security\"
-    On Error Resume Next
-    Wsh.RegWrite secKey & "AccessVBOM", 1, "REG_DWORD"
-    Wsh.RegWrite secKey & "Level", 1, "REG_DWORD"
-    Wsh.RegWrite secKey & "VBAWarnings", 1, "REG_DWORD"
-    Wsh.RegWrite secKey & "DisableAllMacros", 0, "REG_DWORD"
-    Wsh.RegWrite secKey & "ExtensionHardening", 0, "REG_DWORD"
-    If Err.Number = 0 Then
-        successCount = successCount + 1
-    Else
-        errCount = errCount + 1
-    End If
-    On Error GoTo 0
+    For Each root In roots
+        On Error Resume Next
+        Wsh.RegWrite root & v & "\Word\Security\AccessVBOM", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\Word\Security\Level", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\Word\Security\VBAWarnings", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\Word\Security\DisableAllMacros", 0, "REG_DWORD"
+        Wsh.RegWrite root & v & "\Word\Security\ExtensionHardening", 0, "REG_DWORD"
+        Wsh.RegWrite root & v & "\Word\Options\AccessVBOM", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\Common\Security\AccessVBOM", 1, "REG_DWORD"
+        If Err.Number = 0 Then
+            successCount = successCount + 1
+        Else
+            errCount = errCount + 1
+        End If
+        On Error GoTo 0
+    Next
 Next
 
 MsgBox "Microsoft Word Import Access Granted!" & vbCrLf & vbCrLf & _
