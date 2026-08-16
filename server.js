@@ -385,7 +385,14 @@ app.get('/api/connector/:file', (req, res) => {
     return res.status(404).json({ success: false, error: 'File not found.' });
   }
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.send(fs.readFileSync(fullPath, 'utf8'));
+  let content = fs.readFileSync(fullPath, 'utf8');
+  if (file === 'WordToolkit_Setup.vbs') {
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.get('host') || 'localhost:3000';
+    const serverApiUrl = `${protocol}://${host}/api`;
+    content = content.replace('"http://localhost:3000/api"', `"${serverApiUrl}"`);
+  }
+  res.send(content);
 });
 
 // --- SYSTEM IMPORT / EXPORT API ---

@@ -1910,6 +1910,14 @@ async function saveRibbonItem(item) {
   }
 }
 
+function getActiveServerUrl() {
+  let url = apiBaseUrl || '/api';
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = window.location.origin + (url.startsWith('/') ? url : '/' + url);
+  }
+  return url;
+}
+
 /* ---------- CONNECTOR DOWNLOADS ---------- */
 function initConnectorDownloads() {
   const grid = $('#connector-downloads');
@@ -1918,14 +1926,24 @@ function initConnectorDownloads() {
     const btn = document.createElement('button');
     btn.className = 'btn secondary';
     btn.textContent = '↓ Download ' + fname;
-    btn.onclick = () => downloadFile(fname, CONNECTOR_FILES[fname]);
+    btn.onclick = () => {
+      let content = CONNECTOR_FILES[fname];
+      if (fname === 'WordToolkit_Setup.vbs') {
+        content = content.replace('"http://localhost:3000/api"', `"${getActiveServerUrl()}"`);
+      }
+      downloadFile(fname, content);
+    };
     grid.appendChild(btn);
   });
 }
 
 /* ---------- HELPERS ---------- */
 function downloadFile(filename, content) {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  let finalContent = content;
+  if (filename === 'WordToolkit_Setup.vbs' && typeof finalContent === 'string') {
+    finalContent = finalContent.replace('"http://localhost:3000/api"', `"${getActiveServerUrl()}"`);
+  }
+  const blob = new Blob([finalContent], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
