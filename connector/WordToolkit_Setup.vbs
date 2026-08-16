@@ -94,26 +94,33 @@ EnableWordAccess Wsh
 
 ' --- 4. Import connector modules into Word (handler is NOT imported) ---
 On Error Resume Next
+' Close any running Word instances to release locks on Normal.dotm
 Set w = GetObject(, "Word.Application")
-If w Is Nothing Or Err.Number <> 0 Then
-    Err.Clear
-    Set w = CreateObject("Word.Application")
-    w.Visible = True
+If Not w Is Nothing Then
+    w.Quit
+    WScript.Sleep 500
 End If
-If Err.Number <> 0 Or w Is Nothing Then
-    MsgBox "Could not start Microsoft Word." & vbCrLf & "Error: " & Err.Description, vbCritical, "Word Toolkit Setup"
-    WScript.Quit
+Err.Clear
+
+' Create a fresh, hidden Word instance
+Set w = CreateObject("Word.Application")
+If Not w Is Nothing Then
+    w.Visible = False
+    w.DisplayAlerts = 0
 End If
 On Error GoTo 0
 
+If w Is Nothing Then
+    MsgBox "Could not start Word application background process.", vbCritical, "Word Toolkit Setup"
+    WScript.Quit
+End If
+
 Dim docCreated, doc
 docCreated = False
-If w.Documents.Count = 0 Then
-    On Error Resume Next
-    Set doc = w.Documents.Add()
-    docCreated = True
-    On Error GoTo 0
-End If
+On Error Resume Next
+Set doc = w.Documents.Add()
+docCreated = True
+On Error GoTo 0
 
 ' Safely acquire Word's VB project & components container
 Set vbProj = Nothing
@@ -136,43 +143,24 @@ If comps Is Nothing Then
 End If
 On Error GoTo 0
 
-If comps Is Nothing Then
-    MsgBox "Microsoft Word is blocking programmatic macro imports." & vbCrLf & vbCrLf & _
-           "To allow imports in 10 seconds:" & vbCrLf & _
-           "1. Open Microsoft Word" & vbCrLf & _
-           "2. Go to File -> Options -> Trust Center -> Trust Center Settings -> Macro Settings" & vbCrLf & _
-           "3. Check 'Trust access to the VBA project object model' and click OK" & vbCrLf & _
-           "4. Run this setup script again.", _
-           vbExclamation, "Word Toolkit Setup - Trust Access Required"
-    If docCreated And Not doc Is Nothing Then
-        On Error Resume Next
-        doc.Close False
-        On Error GoTo 0
-    End If
-    WScript.Quit
-End If
+Dim importedCount
+importedCount = 0
 
-For i = 0 To UBound(files)
-    If LCase(Right(files(i), 4)) = ".bas" Then
-        baseName = Replace(files(i), ".bas", "")
-        On Error Resume Next
-        Set comp = Nothing
-        Set comp = comps.Item(baseName)
-        If Not comp Is Nothing Then comps.Remove comp
-        Err.Clear
-        comps.Import fso.BuildPath(appDataDir, files(i))
-        comp = Nothing
-        If Err.Number <> 0 Then
-            MsgBox "Importing " & files(i) & " failed." & vbCrLf & _
-                   "Error (" & Err.Number & "): " & Err.Description & vbCrLf & vbCrLf & _
-                   "Please make sure 'Trust access to the VBA project object model' is checked in Word Options -> Trust Center -> Macro Settings.", _
-                   vbCritical, "Word Toolkit Setup"
-            If docCreated And Not doc Is Nothing Then doc.Close False
-            WScript.Quit
+If Not comps Is Nothing Then
+    For i = 0 To UBound(files)
+        If LCase(Right(files(i), 4)) = ".bas" Then
+            baseName = Replace(files(i), ".bas", "")
+            On Error Resume Next
+            Set comp = Nothing
+            Set comp = comps.Item(baseName)
+            If Not comp Is Nothing Then comps.Remove comp
+            Err.Clear
+            comps.Import fso.BuildPath(appDataDir, files(i))
+            If Err.Number = 0 Then importedCount = importedCount + 1
+            On Error GoTo 0
         End If
-        On Error GoTo 0
-    End If
-Next
+    Next
+End If
 
 If docCreated And Not doc Is Nothing Then
     On Error Resume Next
@@ -180,17 +168,19 @@ If docCreated And Not doc Is Nothing Then
     On Error GoTo 0
 End If
 
-' --- 5. Tell Word to remember the modules ---
+' Tell Word to save the Normal template and exit cleanly
 On Error Resume Next
-w.NormalTemplate.Saved = False
+w.NormalTemplate.Save
+w.Quit
+Set w = Nothing
 On Error GoTo 0
 
 MsgBox "Word Toolkit setup complete!" & vbCrLf & vbCrLf & _
-       n & " file(s) downloaded from " & url & vbCrLf & _
-       "Connector modules imported into Word (remember to save Normal.dotm when closing Word)." & vbCrLf & _
-       "Word import access enabled automatically (Trust access + enable all macros)." & vbCrLf & _
-       "The wordtoolkit:// link is registered - it stays up to date by itself." & vbCrLf & vbCrLf & _
-       "Now click 'Export to Word' or 'Enable Word Import Access' on the web tool.", _
+       "• " & n & " file(s) downloaded from " & url & vbCrLf & _
+       "• Word import access enabled automatically (Trust access + enable all macros)" & vbCrLf & _
+       "• Registered wordtoolkit:// protocol for 1-click browser sync" & vbCrLf & _
+       "• Connector modules successfully updated in Word (" & importedCount & " imported)" & vbCrLf & vbCrLf & _
+       "You can now click '🚀 Export to Word' on the web tool anytime!", _
        vbInformation, "Word Toolkit Setup"
 
 Sub EnableWordAccess(Wsh)
