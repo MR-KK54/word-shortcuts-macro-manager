@@ -398,6 +398,9 @@ function renderGroupedMacros() {
 
   Object.keys(groupedMap).sort().forEach(groupName => {
     const items = groupedMap[groupName];
+    const groupShortcuts = currentShortcuts.filter(sc =>
+      (sc.group || 'General').toLowerCase() === groupName.toLowerCase()
+    );
 
     const groupSec = document.createElement('div');
     groupSec.className = 'group-section';
@@ -407,7 +410,7 @@ function renderGroupedMacros() {
     header.innerHTML = `
       <div class="group-title-area">
         <h3 class="group-title">${escapeHtml(groupName)}</h3>
-        <span class="group-count-badge">${items.length} macro${items.length === 1 ? '' : 's'}</span>
+        <span class="group-count-badge">${items.length} macro${items.length === 1 ? '' : 's'}${groupShortcuts.length > 0 ? ` · ${groupShortcuts.length} shortcut set${groupShortcuts.length === 1 ? '' : 's'}` : ''}</span>
       </div>
       <button class="btn small secondary btn-export-group" data-group="${escapeHtml(groupName)}">Export Group (.bas)</button>
     `;
@@ -456,6 +459,31 @@ function renderGroupedMacros() {
       stampsDiv.appendChild(stamp);
     });
 
+    // Bundled shortcut sets for this group
+    groupShortcuts.forEach(sc => {
+      const rows = (sc.csv.match(/\n/g) || []).length;
+      const stamp = document.createElement('div');
+      stamp.className = 'stamp shortcut-stamp';
+      stamp.innerHTML = `
+        <div class="meta">
+          <span class="badge">.CSV</span>
+          <p class="name">${escapeHtml(sc.name)}</p>
+          <span class="sub">${rows} shortcut(s) · ${fmtDate(sc.updatedAt)}</span>
+        </div>
+        <div class="actions">
+          <button class="btn small secondary" data-act="sdl">Download CSV</button>
+          <button class="btn small ghost-danger" data-act="sdel">Delete</button>
+        </div>
+      `;
+      stamp.querySelector('[data-act=sdl]').onclick = () => downloadFile(`${sc.name}.csv`, sc.csv);
+      stamp.querySelector('[data-act=sdel]').onclick = async () => {
+        if (confirm(`Delete shortcut set "${sc.name}" from group "${groupName}"?`)) {
+          await deleteShortcut(sc.id);
+        }
+      };
+      stampsDiv.appendChild(stamp);
+    });
+
     header.querySelector('.btn-export-group').onclick = (e) => {
       e.stopPropagation();
       exportMacroGroup(groupName, items);
@@ -500,6 +528,9 @@ $('#m-save').addEventListener('click', async () => {
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Server save failed');
       showToast(data.action === 'replaced' ? `Replaced existing macro "${name}"` : `Saved macro "${name}"`);
+
+      // Auto-bundle: if a shortcut set is being imported with the same group, save it along with the macro
+      await saveGroupShortcutSet(group);
     } else {
       // Offline LocalStorage Save
       const existingIdx = currentMacros.findIndex(m =>
@@ -515,6 +546,7 @@ $('#m-save').addEventListener('click', async () => {
 
       localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
       showToast(existingIdx >= 0 ? `Replaced local macro "${name}"` : `Saved local macro "${name}"`);
+      await saveGroupShortcutSet(group);
     }
 
     status.textContent = 'Saved successfully!';
@@ -579,7 +611,7 @@ async function refreshShortcuts() {
       <div class="meta">
         <span class="badge">.CSV</span>
         <p class="name">${escapeHtml(sc.name)}</p>
-        <span class="sub">${rows} shortcut(s) · ${fmtDate(sc.updatedAt)}</span>
+        <span class="sub">Group: ${escapeHtml(sc.group || 'General')} · ${rows} shortcut(s) · ${fmtDate(sc.updatedAt)}</span>
       </div>
       <div class="actions">
         <button class="btn small secondary" data-act="dl">Download</button>
@@ -593,6 +625,7 @@ async function refreshShortcuts() {
 
 $('#s-save').addEventListener('click', async () => {
   const name = $('#s-name').value.trim();
+  const group = $('#s-group').value.trim();
   const csv = $('#s-csv').value;
   const status = $('#s-status');
 
@@ -608,10 +641,10 @@ $('#s-save').addEventListener('click', async () => {
       await fetch(`${apiBaseUrl}/shortcuts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, csv })
+        body: JSON.stringify({ name, group, csv })
       });
     } else {
-      currentShortcuts.push({ id: 'sc-' + Date.now(), name, csv, updatedAt: new Date().toISOString() });
+      currentShortcuts.push({ id: 'sc-' + Date.now(), name, group: group || 'General', csv, updatedAt: new Date().toISOString() });
       localStorage.setItem('wt_local_shortcuts', JSON.stringify(currentShortcuts));
     }
     status.textContent = 'Saved!';
@@ -881,6 +914,36 @@ async function saveShortcutItem(item) {
   } else {
     currentShortcuts.push({ ...item, id: 'sc-' + Date.now(), updatedAt: new Date().toISOString() });
     localStorage.setItem('wt_local_shortcuts', JSON.stringify(currentShortcuts));
+  }
+}
+
+// When a macro is saved to a group, also persist any shortcut set the user
+// has prepared for that same group (bundled under the same group name).
+async function saveGroupShortcutSet(group) {
+  const scName = $('#s-name').value.trim();
+  const scGroup = $('#s-group').value.trim();
+  const scCsv = $('#s-csv').value;
+  if (!scName || !scCsv.trim()) return;
+
+  const targetGroup = scGroup || group || 'General';
+  if ((scGroup || 'General').toLowerCase() !== (group || 'General').toLowerCase()) return;
+
+  try {
+    if (isServerOnline) {
+      await fetch(`${apiBaseUrl}/shortcuts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: scName, group: targetGroup, csv: scCsv })
+      });
+    } else {
+      currentShortcuts.push({ id: 'sc-' + Date.now(), name: scName, group: targetGroup, csv: scCsv, updatedAt: new Date().toISOString() });
+      localStorage.setItem('wt_local_shortcuts', JSON.stringify(currentShortcuts));
+    }
+    $('#s-name').value = ''; $('#s-group').value = ''; $('#s-csv').value = '';
+    showToast(`Bundled shortcut set "${scName}" into "${targetGroup}"`);
+    refreshShortcuts();
+  } catch (e) {
+    showToast('Shortcut set bundled, but sync failed: ' + e.message);
   }
 }
 

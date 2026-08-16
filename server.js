@@ -186,21 +186,33 @@ app.delete('/api/macros/:id', (req, res) => {
 // --- SHORTCUTS API ---
 app.get('/api/shortcuts', (req, res) => {
   const db = readDB();
-  res.json({ success: true, shortcuts: db.shortcuts });
+  let shortcuts = db.shortcuts;
+  const { group } = req.query;
+  if (group) {
+    shortcuts = shortcuts.filter(s => (s.group || 'General').toLowerCase() === group.toLowerCase());
+  }
+  res.json({ success: true, shortcuts });
 });
 
 app.post('/api/shortcuts', (req, res) => {
-  const { id, name, csv } = req.body;
+  const { id, name, csv, group } = req.body;
   if (!name || !name.trim() || !csv || !csv.trim()) {
     return res.status(400).json({ success: false, error: 'Set name and CSV data are required.' });
   }
 
   const db = readDB();
   const cleanName = name.trim();
-  let existingIndex = id ? db.shortcuts.findIndex(s => s.id === id) : db.shortcuts.findIndex(s => s.name.toLowerCase() === cleanName.toLowerCase());
+  const cleanGroup = (group && group.trim()) ? group.trim() : 'General';
+  let existingIndex = id
+    ? db.shortcuts.findIndex(s => s.id === id)
+    : db.shortcuts.findIndex(s =>
+        s.name.toLowerCase() === cleanName.toLowerCase() &&
+        (s.group || 'General').toLowerCase() === cleanGroup.toLowerCase()
+      );
 
   const shortcutObj = {
     id: existingIndex >= 0 ? db.shortcuts[existingIndex].id : 'sc-' + Date.now(),
+    group: cleanGroup,
     name: cleanName,
     csv: csv,
     updatedAt: new Date().toISOString()
@@ -311,7 +323,10 @@ app.post('/api/import', (req, res) => {
 
     if (Array.isArray(data.shortcuts)) {
       data.shortcuts.forEach(newS => {
-        const idx = db.shortcuts.findIndex(s => s.name.toLowerCase() === (newS.name || '').toLowerCase());
+        const idx = db.shortcuts.findIndex(s =>
+          s.name.toLowerCase() === (newS.name || '').toLowerCase() &&
+          (s.group || 'General').toLowerCase() === (newS.group || 'General').toLowerCase()
+        );
         if (idx >= 0) db.shortcuts[idx] = newS;
         else db.shortcuts.push(newS);
       });

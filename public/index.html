@@ -92,10 +92,13 @@
       <div class="panel-grid">
         <div>
           <h2 class="section-title">Store Shortcut Set</h2>
-          <p class="section-sub">Paste the CSV exported from Word via the connector's <em>ExportKeyboardShortcuts</em> macro.</p>
+          <p class="section-sub">Paste the CSV exported from Word via the connector's <em>ExportKeyboardShortcuts</em> macro. Give it the same group name as its macros to bundle them together.</p>
 
           <label for="s-name">Set Name</label>
           <input type="text" id="s-name" placeholder="e.g. Editing Shortcuts - Laptop">
+
+          <label for="s-group">Storing Group Name</label>
+          <input type="text" id="s-group" placeholder="e.g. Formatting Tools, Legal Automation, General" list="group-suggestions">
 
           <label for="s-csv">CSV Content</label>
           <textarea id="s-csv" placeholder="KeyCategory,Command,KeyCode,KeyCode2,KeyString"></textarea>
