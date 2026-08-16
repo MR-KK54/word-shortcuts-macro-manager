@@ -8,9 +8,13 @@ Option Explicit
 '  REQUIREMENT: Enable "Trust access to the VBA project object
 '  model" (File > Options > Trust Center > Macro Settings).
 '
-'  The web app's "Export to Word" dialog generates a customized
-'  copy of this module with the chosen group selections baked in
-'  below (@@placeholders@@ are replaced by the web app).
+'  ENTRY POINTS:
+'   - SyncAllFromServer : menu option 7; uses the selections
+'     baked into this module (web app "Export to Word" dialog).
+'   - SyncSelections    : called directly by Windows when you
+'     click "Install into Word" on the web page (wordtoolkit://
+'     link registered by WordToolkit_Setup.vbs). Takes the
+'     server URL and group choices as arguments - nothing baked in.
 ' ============================================================
 
 ' --- INSTALLER SELECTIONS (replaced by the web app) ---
@@ -38,16 +42,15 @@ Private Function ServerBaseUrl() As String
     ServerBaseUrl = sUrl
 End Function
 
-' Returns the URL-encoded group filter for a synced section
-Private Function GroupFilter(section As String) As String
-    Dim grp As String
-    grp = SELECTED_MACRO_GROUP
-    If section = "shortcuts" Then grp = SELECTED_SHORTCUT_GROUP
-    If section = "ribbon" Then grp = SELECTED_RIBBON_GROUP
-    If grp = "" Or InStr(grp, "@@") > 0 Then
-        GroupFilter = ""
-    Else
-        GroupFilter = "?group=" & Replace(grp, " ", "%20")
+' Builds the sync URL for one section; grp="" falls back to the
+' baked-in constant of that section, "@@" (unset) means all groups.
+Private Function SectionUrl(baseUrl As String, endpoint As String, grp As String, defGrp As String) As String
+    Dim g As String
+    g = grp
+    If g = "" Then g = defGrp
+    SectionUrl = baseUrl & "/" & endpoint
+    If g <> "" And InStr(g, "@@") = 0 Then
+        SectionUrl = SectionUrl & "?group=" & Replace(g, " ", "%20")
     End If
 End Function
 
@@ -70,7 +73,25 @@ HttpErr:
     HttpGetText = ""
 End Function
 
-' --- MAIN ENTRY POINT: install macros + shortcuts + ribbon of the selected groups ---
+' --- DIRECT INSTALL ENTRY (triggered by the web page via wordtoolkit://) ---
+Public Sub SyncSelections(baseUrl As String, macGroup As String, scGroup As String, rbGroup As String)
+    Dim url As String, macMsg As String, scMsg As String, rbMsg As String
+    url = baseUrl
+    If url = "" Then url = ServerBaseUrl()
+    If url = "" Then Exit Sub
+    If Right(url, 1) = "/" Then url = Left(url, Len(url) - 1)
+
+    macMsg = SyncMacrosFromServer(url, macGroup)
+    scMsg = SyncShortcutsFromServer(url, scGroup)
+    rbMsg = SyncRibbonFromServer(url, rbGroup)
+
+    MsgBox "Word Toolkit - Direct Install complete!" & vbCrLf & vbCrLf & _
+           macMsg & vbCrLf & scMsg & vbCrLf & rbMsg & vbCrLf & vbCrLf & _
+           "Save Normal.dotm when you close Word so the changes persist.", _
+           vbInformation, "Word Toolkit Direct Install"
+End Sub
+
+' --- MENU ENTRY (menu option 7): uses the baked-in selections ---
 Sub SyncAllFromServer()
     Dim baseUrl As String, macMsg As String, scMsg As String, rbMsg As String
     baseUrl = ServerBaseUrl()
@@ -90,7 +111,7 @@ Sub SyncAllFromServer()
 End Sub
 
 ' --- MACROS ---
-Public Function SyncMacrosFromServer(baseUrl As String) As String
+Public Function SyncMacrosFromServer(baseUrl As String, Optional grp As String = "") As String
     Dim bundle As String, vbProj As Object, count As Integer, replacedCount As Integer
     Dim groupName As String, compName As String, compType As String, code As String
     Dim lines() As String, i As Long, inMacro As Boolean
@@ -99,7 +120,7 @@ Public Function SyncMacrosFromServer(baseUrl As String) As String
 
     On Error GoTo HandleErr
 
-    bundle = HttpGetText(baseUrl & "/sync/macros" & GroupFilter("macros"))
+    bundle = HttpGetText(SectionUrl(baseUrl, "sync/macros", grp, SELECTED_MACRO_GROUP))
     If bundle = "" Then
         SyncMacrosFromServer = "Macros: not synced (no data or server unreachable)."
         Exit Function
@@ -167,14 +188,14 @@ HandleErr:
 End Function
 
 ' --- SHORTCUTS ---
-Public Function SyncShortcutsFromServer(baseUrl As String) As String
+Public Function SyncShortcutsFromServer(baseUrl As String, Optional grp As String = "") As String
     Dim csvData As String, lines() As String, i As Long
     Dim parts() As String, count As Integer, failCount As Integer
     Dim ln As String, setCount As Integer
 
     On Error GoTo HandleErr
 
-    csvData = HttpGetText(baseUrl & "/sync/shortcuts" & GroupFilter("shortcuts"))
+    csvData = HttpGetText(SectionUrl(baseUrl, "sync/shortcuts", grp, SELECTED_SHORTCUT_GROUP))
     If csvData = "" Then
         SyncShortcutsFromServer = "Shortcuts: not synced (no data or server unreachable)."
         Exit Function
@@ -216,14 +237,14 @@ End Function
 ' --- RIBBON ---
 ' Downloads the selected .officeUI profile(s) and writes the file to
 ' Word's AppData folder. Word must be restarted to apply the ribbon.
-Public Function SyncRibbonFromServer(baseUrl As String) As String
+Public Function SyncRibbonFromServer(baseUrl As String, Optional grp As String = "") As String
     Dim bundle As String, lines() As String, i As Long
     Dim ln As String, fso As Object, folderPath As String, filePath As String
     Dim fnum As Integer, xml As String, written As Integer, inRibbon As Boolean
 
     On Error GoTo HandleErr
 
-    bundle = HttpGetText(baseUrl & "/sync/ribbon" & GroupFilter("ribbon"))
+    bundle = HttpGetText(SectionUrl(baseUrl, "sync/ribbon", grp, SELECTED_RIBBON_GROUP))
     If bundle = "" Then
         SyncRibbonFromServer = "Ribbon: not synced (no data or server unreachable)."
         Exit Function

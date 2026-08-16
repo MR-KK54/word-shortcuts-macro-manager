@@ -243,7 +243,7 @@
 <div class="modal-backdrop" id="export-word-modal" style="display:none;">
   <div class="modal-box">
     <h2 class="section-title">🚀 Export Directly to MS Word</h2>
-    <p class="section-sub">Choose which groups to install into Word. You get one installer module that fetches the selections from this server — import it in Word (Alt+F8 → run <code>SyncAllFromServer</code>).</p>
+    <p class="section-sub">Choose which groups to install and click <strong>Install into Word Now</strong> — it pushes straight into the open Word on this PC via a registered <code>wordtoolkit://</code> link (no downloads).</p>
 
     <div class="ew-row">
       <label class="ew-check"><input type="checkbox" id="ew-macros" checked> <strong>Macros</strong></label>
@@ -264,14 +264,22 @@
       </select>
     </div>
 
-    <label for="ew-server-url" style="margin-top:16px;">Server API Base URL (baked into the installer)</label>
+    <label for="ew-server-url" style="margin-top:16px;">Server API Base URL</label>
     <input type="text" id="ew-server-url" value="/api">
 
-    <p style="font-size:12px; color:var(--ink-soft); margin-top:10px;">Requires <strong>"Trust access to the VBA project object model"</strong> (File &gt; Options &gt; Trust Center &gt; Macro Settings). Ribbon installs to <code>%APPDATA%\Microsoft\Office\Word.officeUI</code> — restart Word to apply.</p>
+    <p style="font-size:12px; color:var(--ink-soft); margin-top:10px;" id="ew-note">
+      <strong>First time on this PC:</strong> download and run <code>WordToolkit_Setup.vbs</code> once
+      (close Word first) — it imports the connector into Word and registers the <code>wordtoolkit://</code> link.
+      Afterwards this button installs directly, every time.
+      Requires <strong>"Trust access to the VBA project object model"</strong> (File &gt; Options &gt; Trust Center &gt; Macro Settings).
+      Ribbon installs to <code>%APPDATA%\Microsoft\Office\Word.officeUI</code> — restart Word to apply.
+    </p>
 
-    <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+    <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap;">
+      <a href="#!" id="btn-generate-installer" style="font-size:12px; margin-right:auto; align-self:center;">Fallback: optional installer .bas file</a>
       <button class="btn secondary" id="btn-close-export-word">Cancel</button>
-      <button class="btn" id="btn-generate-installer">Generate Word Installer (.bas)</button>
+      <button class="btn secondary" id="btn-download-setup">Download One-Time Setup (.vbs)</button>
+      <button class="btn" id="btn-export-direct-word">⚡ Install into Word Now</button>
     </div>
   </div>
 </div>

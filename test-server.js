@@ -155,6 +155,18 @@ async function runTests() {
     assert.ok(!res8b.raw.includes('#RIBBON:'), 'filtered ribbon bundle should be empty');
     console.log('  ✅ PASSED: Ribbon bundle + group filter verified');
 
+    // 9. Connector source delivery (used by the one-time Word setup)
+    console.log('\nTest 9: Connector Source Delivery');
+    const res9 = await request('GET', '/api/connector/Toolkit_Sync.bas');
+    assert.strictEqual(res9.status, 200);
+    assert.ok(res9.raw.includes('SyncSelections'), 'connector should contain the direct-install entry');
+    const res9b = await request('GET', '/api/connector/WordToolkit_Setup.vbs');
+    assert.strictEqual(res9b.status, 200);
+    assert.ok(res9b.raw.includes('wordtoolkit'), 'setup should register the protocol link');
+    const res9c = await request('GET', '/api/connector/..%2Fserver.js');
+    assert.strictEqual(res9c.status, 400, 'path traversal should be rejected');
+    console.log('  ✅ PASSED: Connector files served securely');
+
     console.log('\n====================================================');
     console.log('🎉 ALL API TESTS PASSED SUCCESSFULLY!');
     console.log('====================================================');

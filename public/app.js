@@ -266,9 +266,13 @@ Option Explicit
 '  REQUIREMENT: Enable "Trust access to the VBA project object
 '  model" (File > Options > Trust Center > Macro Settings).
 '
-'  The web app's "Export to Word" dialog generates a customized
-'  copy of this module with the chosen group selections baked in
-'  below (@@placeholders@@ are replaced by the web app).
+'  ENTRY POINTS:
+'   - SyncAllFromServer : menu option 7; uses the selections
+'     baked into this module (web app "Export to Word" dialog).
+'   - SyncSelections    : called directly by Windows when you
+'     click "Install into Word" on the web page (wordtoolkit://
+'     link registered by WordToolkit_Setup.vbs). Takes the
+'     server URL and group choices as arguments - nothing baked in.
 ' ============================================================
 
 ' --- INSTALLER SELECTIONS (replaced by the web app) ---
@@ -296,16 +300,15 @@ Private Function ServerBaseUrl() As String
     ServerBaseUrl = sUrl
 End Function
 
-' Returns the URL-encoded group filter for a synced section
-Private Function GroupFilter(section As String) As String
-    Dim grp As String
-    grp = SELECTED_MACRO_GROUP
-    If section = "shortcuts" Then grp = SELECTED_SHORTCUT_GROUP
-    If section = "ribbon" Then grp = SELECTED_RIBBON_GROUP
-    If grp = "" Or InStr(grp, "@@") > 0 Then
-        GroupFilter = ""
-    Else
-        GroupFilter = "?group=" & Replace(grp, " ", "%20")
+' Builds the sync URL for one section; grp="" falls back to the
+' baked-in constant of that section, "@@" (unset) means all groups.
+Private Function SectionUrl(baseUrl As String, endpoint As String, grp As String, defGrp As String) As String
+    Dim g As String
+    g = grp
+    If g = "" Then g = defGrp
+    SectionUrl = baseUrl & "/" & endpoint
+    If g <> "" And InStr(g, "@@") = 0 Then
+        SectionUrl = SectionUrl & "?group=" & Replace(g, " ", "%20")
     End If
 End Function
 
@@ -328,7 +331,25 @@ HttpErr:
     HttpGetText = ""
 End Function
 
-' --- MAIN ENTRY POINT: install macros + shortcuts + ribbon of the selected groups ---
+' --- DIRECT INSTALL ENTRY (triggered by the web page via wordtoolkit://) ---
+Public Sub SyncSelections(baseUrl As String, macGroup As String, scGroup As String, rbGroup As String)
+    Dim url As String, macMsg As String, scMsg As String, rbMsg As String
+    url = baseUrl
+    If url = "" Then url = ServerBaseUrl()
+    If url = "" Then Exit Sub
+    If Right(url, 1) = "/" Then url = Left(url, Len(url) - 1)
+
+    macMsg = SyncMacrosFromServer(url, macGroup)
+    scMsg = SyncShortcutsFromServer(url, scGroup)
+    rbMsg = SyncRibbonFromServer(url, rbGroup)
+
+    MsgBox "Word Toolkit - Direct Install complete!" & vbCrLf & vbCrLf & _
+           macMsg & vbCrLf & scMsg & vbCrLf & rbMsg & vbCrLf & vbCrLf & _
+           "Save Normal.dotm when you close Word so the changes persist.", _
+           vbInformation, "Word Toolkit Direct Install"
+End Sub
+
+' --- MENU ENTRY (menu option 7): uses the baked-in selections ---
 Sub SyncAllFromServer()
     Dim baseUrl As String, macMsg As String, scMsg As String, rbMsg As String
     baseUrl = ServerBaseUrl()
@@ -348,7 +369,7 @@ Sub SyncAllFromServer()
 End Sub
 
 ' --- MACROS ---
-Public Function SyncMacrosFromServer(baseUrl As String) As String
+Public Function SyncMacrosFromServer(baseUrl As String, Optional grp As String = "") As String
     Dim bundle As String, vbProj As Object, count As Integer, replacedCount As Integer
     Dim groupName As String, compName As String, compType As String, code As String
     Dim lines() As String, i As Long, inMacro As Boolean
@@ -357,7 +378,7 @@ Public Function SyncMacrosFromServer(baseUrl As String) As String
 
     On Error GoTo HandleErr
 
-    bundle = HttpGetText(baseUrl & "/sync/macros" & GroupFilter("macros"))
+    bundle = HttpGetText(SectionUrl(baseUrl, "sync/macros", grp, SELECTED_MACRO_GROUP))
     If bundle = "" Then
         SyncMacrosFromServer = "Macros: not synced (no data or server unreachable)."
         Exit Function
@@ -425,14 +446,14 @@ HandleErr:
 End Function
 
 ' --- SHORTCUTS ---
-Public Function SyncShortcutsFromServer(baseUrl As String) As String
+Public Function SyncShortcutsFromServer(baseUrl As String, Optional grp As String = "") As String
     Dim csvData As String, lines() As String, i As Long
     Dim parts() As String, count As Integer, failCount As Integer
     Dim ln As String, setCount As Integer
 
     On Error GoTo HandleErr
 
-    csvData = HttpGetText(baseUrl & "/sync/shortcuts" & GroupFilter("shortcuts"))
+    csvData = HttpGetText(SectionUrl(baseUrl, "sync/shortcuts", grp, SELECTED_SHORTCUT_GROUP))
     If csvData = "" Then
         SyncShortcutsFromServer = "Shortcuts: not synced (no data or server unreachable)."
         Exit Function
@@ -474,14 +495,14 @@ End Function
 ' --- RIBBON ---
 ' Downloads the selected .officeUI profile(s) and writes the file to
 ' Word's AppData folder. Word must be restarted to apply the ribbon.
-Public Function SyncRibbonFromServer(baseUrl As String) As String
+Public Function SyncRibbonFromServer(baseUrl As String, Optional grp As String = "") As String
     Dim bundle As String, lines() As String, i As Long
     Dim ln As String, fso As Object, folderPath As String, filePath As String
     Dim fnum As Integer, xml As String, written As Integer, inRibbon As Boolean
 
     On Error GoTo HandleErr
 
-    bundle = HttpGetText(baseUrl & "/sync/ribbon" & GroupFilter("ribbon"))
+    bundle = HttpGetText(SectionUrl(baseUrl, "sync/ribbon", grp, SELECTED_RIBBON_GROUP))
     If bundle = "" Then
         SyncRibbonFromServer = "Ribbon: not synced (no data or server unreachable)."
         Exit Function
@@ -536,7 +557,164 @@ HandleErr:
     MsgBox "Could not install the ribbon profile." & vbCrLf & _
            "Error: " & Err.Description, vbCritical, "Sync Ribbon Error"
     SyncRibbonFromServer = "Ribbon: failed with error."
+End Function`,
+'WordToolkit_Setup.vbs': `Option Explicit
+' ============================================================
+'  WORD TOOLKIT - ONE-TIME SETUP (run once per PC)
+'  What it does:
+'   1. Downloads the connector modules from your server
+'   2. Registers the "wordtoolkit://" link so the web tool can
+'      install macros/shortcuts/ribbon into Word with one click
+'   3. Creates the Windows handler that receives those links
+'   4. Imports the connector modules into Word (Normal project)
+'  REQUIREMENT: File > Options > Trust Center > Macro Settings
+'   -> enable "Trust access to the VBA project object model".
+'  Close ALL other Word windows first, then double-click this file.
+' ============================================================
+
+Dim Wsh, fso, url, appDataDir, i, n, f, http, w, vbProj, comp, compName
+Dim files, baseName, cmd, handlerPath
+
+Set Wsh = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+url = InputBox("Enter your Word Toolkit server URL:" & vbCrLf & _
+               "(e.g. https://your-app.onrender.com/api  or  http://localhost:3000/api)", _
+               "Word Toolkit - One-Time Setup", "http://localhost:3000/api")
+If url = "" Then WScript.Quit
+If Right(url, 1) = "/" Then url = Left(url, Len(url) - 1)
+If LCase(Right(url, 4)) <> "/api" Then url = url & "/api"
+
+' --- 1. Download connector modules ---
+appDataDir = fso.BuildPath(Wsh.ExpandEnvironmentStrings("%APPDATA%"), "WordToolkit")
+If Not fso.FolderExists(appDataDir) Then fso.CreateFolder appDataDir
+
+files = Array("Toolkit_Helpers.bas", "Toolkit_Macros.bas", "Toolkit_Menu.bas", _
+              "Toolkit_RibbonQAT.bas", "Toolkit_Shortcuts.bas", "Toolkit_Sync.bas")
+n = 0
+For i = 0 To UBound(files)
+    Set http = CreateObject("MSXML2.XMLHTTP")
+    http.Open "GET", url & "/connector/" & files(i), False
+    http.Send
+    If http.Status >= 200 And http.Status < 300 Then
+        Set f = fso.CreateTextFile(fso.BuildPath(appDataDir, files(i)), True, True)
+        f.Write http.ResponseText
+        f.Close
+        n = n + 1
+    Else
+        MsgBox "Could not download " & files(i) & " (HTTP " & http.Status & ")." & vbCrLf & _
+               "Check the server URL.", vbExclamation, "Word Toolkit Setup"
+    End If
+Next
+If n = 0 Then
+    MsgBox "No connector files could be downloaded. Setup aborted.", vbCritical, "Word Toolkit Setup"
+    WScript.Quit
+End If
+
+' --- 2. Register the wordtoolkit:// protocol link ---
+cmd = """" & Wsh.ExpandEnvironmentStrings("%WINDIR%") & "\\System32\\wscript.exe"" """ & _
+      appDataDir & "\\sync-handler.vbs"" ""%1"""
+On Error Resume Next
+Wsh.RegWrite "HKCU\\Software\\Classes\\wordtoolkit\\shell\\open\\command\\", cmd, "REG_SZ"
+If Err.Number <> 0 Then
+    MsgBox "Could not register the wordtoolkit:// link." & vbCrLf & "Error: " & Err.Description, vbCritical, "Word Toolkit Setup"
+    WScript.Quit
+End If
+On Error GoTo 0
+
+' --- 3. Write the link handler script ---
+handlerPath = fso.BuildPath(appDataDir, "sync-handler.vbs")
+Set f = fso.CreateTextFile(handlerPath, True, True)
+f.Write HandlerSource()
+f.Close
+
+' --- 4. Import connector modules into Word ---
+On Error Resume Next
+Set w = GetObject(, "Word.Application")
+If w Is Nothing Then
+    Set w = CreateObject("Word.Application")
+    w.Visible = True
+End If
+If Err.Number <> 0 Then
+    MsgBox "Could not start Microsoft Word." & vbCrLf & "Error: " & Err.Description, vbCritical, "Word Toolkit Setup"
+    WScript.Quit
+End If
+On Error GoTo 0
+
+On Error Resume Next
+Set vbProj = w.VBE.ActiveVBProject
+For i = 0 To UBound(files)
+    baseName = Replace(files(i), ".bas", "")
+    Set comp = Nothing
+    Set comp = vbProj.VBComponents(baseName)
+    If Not comp Is Nothing Then vbProj.VBComponents.Remove comp
+    vbProj.VBComponents.Import fso.BuildPath(appDataDir, files(i))
+    comp = Nothing
+    If Err.Number <> 0 Then
+        MsgBox "Importing " & files(i) & " failed." & vbCrLf & _
+               "Enable 'Trust access to the VBA project object model' and try again." & vbCrLf & _
+               "Error: " & Err.Description, vbCritical, "Word Toolkit Setup"
+        WScript.Quit
+    End If
+Next
+On Error GoTo 0
+
+' --- 5. Tell Word to remember the modules ---
+On Error Resume Next
+w.NormalTemplate.Saved = False
+On Error GoTo 0
+
+MsgBox "Word Toolkit setup complete!" & vbCrLf & vbCrLf & _
+       n & " connector module(s) downloaded from " & url & vbCrLf & _
+       "Modules imported into Word (remember to save Normal.dotm when closing Word)." & vbCrLf & _
+       "The wordtoolkit:// link is now registered." & vbCrLf & vbCrLf & _
+       "You can now click 'Export to Word' on the web tool to install directly.", _
+       vbInformation, "Word Toolkit Setup"
+
+' ============================================================
+' Returns the source of the sync-handler.vbs written above.
+' (Kept as a string so this file stays fully self-contained.)
+' ============================================================
+Function HandlerSource()
+    Dim h
+    h = "Option Explicit" & vbCrLf
+    h = h & "'' Word Toolkit - receives wordtoolkit://sync links from the web tool" & vbCrLf
+    h = h & "'' and tells the running Microsoft Word to install the selection." & vbCrLf
+    h = h & "Dim argLine, parts, kv, i, dict, p, k, u, m, s, r, w" & vbCrLf
+    h = h & "argLine = """ & vbCrLf
+    h = h & "If WScript.Arguments.Count > 0 Then argLine = WScript.Arguments(0)" & vbCrLf
+    h = h & "Set dict = CreateObject(""Scripting.Dictionary"")" & vbCrLf
+    h = h & "parts = Split(argLine, ""&"")" & vbCrLf
+    h = h & "For i = 0 To UBound(parts)" & vbCrLf
+    h = h & "    kv = Split(parts(i), ""="")" & vbCrLf
+    h = h & "    If UBound(kv) >= 1 Then" & vbCrLf
+    h = h & "        p = kv(0)" & vbCrLf
+    h = h & "        k = Mid(p, InStrRev(p, ""?"") + 1)" & vbCrLf
+    h = h & "        dict(k) = Unescape(kv(1))" & vbCrLf
+    h = h & "    End If" & vbCrLf
+    h = h & "Next" & vbCrLf
+    h = h & "u = dict(""u""): m = dict(""m""): s = dict(""s""): r = dict(""r"")" & vbCrLf
+    h = h & "On Error Resume Next" & vbCrLf
+    h = h & "Set w = GetObject(, ""Word.Application"")" & vbCrLf
+    h = h & "If w Is Nothing Then" & vbCrLf
+    h = h & "    Set w = CreateObject(""Word.Application"")" & vbCrLf
+    h = h & "    w.Visible = True" & vbCrLf
+    h = h & "End If" & vbCrLf
+    h = h & "If Err.Number <> 0 Then" & vbCrLf
+    h = h & "    MsgBox ""Could not start Word: "" & Err.Description, vbCritical, ""Word Toolkit""" & vbCrLf
+    h = h & "    WScript.Quit" & vbCrLf
+    h = h & "End If" & vbCrLf
+    h = h & "On Error GoTo 0" & vbCrLf
+    h = h & "On Error Resume Next" & vbCrLf
+    h = h & "w.Run ""Toolkit_Sync.SyncSelections"", u, m, s, r" & vbCrLf
+    h = h & "If Err.Number <> 0 Then" & vbCrLf
+    h = h & "    MsgBox ""Direct install failed. Run the setup again."" & vbCrLf & ""Error: "" & Err.Description, vbCritical, ""Word Toolkit""" & vbCrLf
+    h = h & "End If" & vbCrLf
+    h = h & "'' The SyncSelections macro shows its own summary box." & vbCrLf
+    h = h & "WScript.Quit" & vbCrLf
+    HandlerSource = h
 End Function`
+
 };
 
 /* ---------- DOM LOAD & EVENT LISTENERS ---------- */
@@ -1245,6 +1423,29 @@ $('#io-export-word').addEventListener('click', (e) => {
 
 $('#btn-close-export-word').addEventListener('click', () => {
   $('#export-word-modal').style.display = 'none';
+});
+
+// One-time PC setup: imports connector into Word + registers wordtoolkit:// link
+$('#btn-download-setup').addEventListener('click', () => {
+  downloadFile('WordToolkit_Setup.vbs', CONNECTOR_FILES['WordToolkit_Setup.vbs']);
+  showToast('Setup downloaded — close Word windows, then run it once on this PC');
+});
+
+// Direct install: trigger the registered wordtoolkit:// link, which tells the
+// running Word to fetch the selection from the server and install it.
+$('#btn-export-direct-word').addEventListener('click', () => {
+  const clean = v => (v || '').replace(/"/g, "'").replace(/[\r\n]+/g, ' ').trim();
+  const url = clean($('#ew-server-url').value);
+  const mac = $('#ew-macros').checked ? clean($('#ew-macro-group').value) : '';
+  const sc = $('#ew-shortcuts').checked ? clean($('#ew-shortcut-group').value) : '';
+  const rb = $('#ew-ribbon').checked ? clean($('#ew-ribbon-group').value) : '';
+  const link = 'wordtoolkit://sync?u=' + encodeURIComponent(url || '/api') +
+               '&m=' + encodeURIComponent(mac) +
+               '&s=' + encodeURIComponent(sc) +
+               '&r=' + encodeURIComponent(rb);
+  window.location.href = link;
+  $('#export-word-modal').style.display = 'none';
+  showToast('Installing into Word… (click Allow if Windows asks)');
 });
 
 $('#btn-generate-installer').addEventListener('click', () => {

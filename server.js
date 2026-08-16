@@ -374,6 +374,20 @@ app.delete('/api/ribbon/:id', (req, res) => {
   res.json({ success: true, message: 'Ribbon profile deleted.' });
 });
 
+// Connector source files (used by WordToolkit_Setup.vbs to install into Word)
+app.get('/api/connector/:file', (req, res) => {
+  const { file } = req.params;
+  if (!/^[A-Za-z0-9_\-]+\.(bas|vbs)$/.test(file)) {
+    return res.status(400).json({ success: false, error: 'Invalid file name.' });
+  }
+  const fullPath = path.join(__dirname, 'connector', file);
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).json({ success: false, error: 'File not found.' });
+  }
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(fs.readFileSync(fullPath, 'utf8'));
+});
+
 // --- SYSTEM IMPORT / EXPORT API ---
 
 // --- DIRECT WORD SYNC BUNDLES (plain text, VBA-friendly) ---
