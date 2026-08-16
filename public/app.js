@@ -781,7 +781,77 @@ MsgBox "Microsoft Word Import Access Granted!" & vbCrLf & vbCrLf & _
        "• VBA macro warnings: DISABLED (Full Trust)" & vbCrLf & vbCrLf & _
        "Configured for " & successCount & " Microsoft Office version registry keys." & vbCrLf & _
        "If Word is currently open, please restart Word to apply the new permissions.", _
-       vbInformation, "Word Toolkit - Access Manager"`
+       vbInformation, "Word Toolkit - Access Manager"`,
+'Reset_Word_Normal_Template.vbs': `Option Explicit
+' ============================================================
+'  WORD TOOLKIT - RESET & UNLOCK NORMAL TEMPLATE
+' ============================================================
+Dim Wsh, fso, templatesDir, normalFile, backupFile, w, versions, v, secKey, polKey, root, roots
+
+Set Wsh = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+On Error Resume Next
+Set w = GetObject(, "Word.Application")
+If Not w Is Nothing Then
+    w.Quit
+    WScript.Sleep 500
+End If
+Err.Clear
+Wsh.Run "taskkill /F /IM winword.exe /T", 0, True
+On Error GoTo 0
+
+templatesDir = fso.BuildPath(Wsh.ExpandEnvironmentStrings("%APPDATA%"), "Microsoft\\Templates")
+normalFile = fso.BuildPath(templatesDir, "Normal.dotm")
+backupFile = fso.BuildPath(templatesDir, "Normal_Backup_" & Replace(Replace(Replace(Now(), "/", "-"), ":", "-"), " ", "_") & ".dotm")
+
+If fso.FileExists(normalFile) Then
+    On Error Resume Next
+    fso.CopyFile normalFile, backupFile, True
+    fso.DeleteFile normalFile, True
+    On Error GoTo 0
+End If
+
+versions = Array("16.0", "15.0", "14.0", "12.0", "11.0")
+roots = Array( _
+    "HKCU\\Software\\Microsoft\\Office\\", _
+    "HKCU\\Software\\Policies\\Microsoft\\Office\\", _
+    "HKLM\\Software\\Microsoft\\Office\\", _
+    "HKLM\\Software\\Policies\\Microsoft\\Office\\", _
+    "HKLM\\Software\\WOW6432Node\\Microsoft\\Office\\", _
+    "HKLM\\Software\\WOW6432Node\\Policies\\Microsoft\\Office\\" _
+)
+For Each v In versions
+    For Each root In roots
+        On Error Resume Next
+        Wsh.RegWrite root & v & "\\Word\\Security\\AccessVBOM", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\\Word\\Security\\Level", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\\Word\\Security\VBAWarnings", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\\Word\\Security\\DisableAllMacros", 0, "REG_DWORD"
+        Wsh.RegWrite root & v & "\\Word\\Security\\ExtensionHardening", 0, "REG_DWORD"
+        Wsh.RegWrite root & v & "\\Word\\Options\\AccessVBOM", 1, "REG_DWORD"
+        Wsh.RegWrite root & v & "\\Common\\Security\\AccessVBOM", 1, "REG_DWORD"
+        On Error GoTo 0
+    Next
+Next
+
+On Error Resume Next
+Set w = CreateObject("Word.Application")
+If Not w Is Nothing Then
+    w.Visible = False
+    w.Documents.Add
+    w.NormalTemplate.Save
+    w.Quit
+    Set w = Nothing
+End If
+On Error GoTo 0
+
+MsgBox "Word Normal Template Reset Completed!" & vbCrLf & vbCrLf & _
+       "• Old locked template backed up to: " & backupFile & vbCrLf & _
+       "• Fresh, clean, unlocked Normal.dotm template created" & vbCrLf & _
+       "• Trust access to VBA project object model enabled" & vbCrLf & vbCrLf & _
+       "Now run WordToolkit_Setup.vbs to install the toolkit into your fresh template!", _
+       vbInformation, "Reset Word Template"`
 };
 
 /* ---------- DOM LOAD & EVENT LISTENERS ---------- */
