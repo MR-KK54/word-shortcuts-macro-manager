@@ -1433,19 +1433,38 @@ $('#btn-download-setup').addEventListener('click', () => {
 
 // Direct install: trigger the registered wordtoolkit:// link, which tells the
 // running Word to fetch the selection from the server and install it.
-$('#btn-export-direct-word').addEventListener('click', () => {
+function directInstallToWord(mac, sc, rb) {
   const clean = v => (v || '').replace(/"/g, "'").replace(/[\r\n]+/g, ' ').trim();
-  const url = clean($('#ew-server-url').value);
-  const mac = $('#ew-macros').checked ? clean($('#ew-macro-group').value) : '';
-  const sc = $('#ew-shortcuts').checked ? clean($('#ew-shortcut-group').value) : '';
-  const rb = $('#ew-ribbon').checked ? clean($('#ew-ribbon-group').value) : '';
-  const link = 'wordtoolkit://sync?u=' + encodeURIComponent(url || '/api') +
-               '&m=' + encodeURIComponent(mac) +
-               '&s=' + encodeURIComponent(sc) +
-               '&r=' + encodeURIComponent(rb);
+  const url = clean($('#ew-server-url').value) || apiBaseUrl;
+  const m = mac ? clean(mac) : '';
+  const s = sc ? clean(sc) : '';
+  const r = rb ? clean(rb) : '';
+  const link = 'wordtoolkit://sync?u=' + encodeURIComponent(url) +
+               '&m=' + encodeURIComponent(m) +
+               '&s=' + encodeURIComponent(s) +
+               '&r=' + encodeURIComponent(r);
   window.location.href = link;
   $('#export-word-modal').style.display = 'none';
   showToast('Installing into Word… (click Allow if Windows asks)');
+}
+
+$('#btn-export-direct-word').addEventListener('click', () => {
+  directInstallToWord(
+    $('#ew-macros').checked ? $('#ew-macro-group').value : '',
+    $('#ew-shortcuts').checked ? $('#ew-shortcut-group').value : '',
+    $('#ew-ribbon').checked ? $('#ew-ribbon-group').value : ''
+  );
+});
+
+// One-click installs straight from each tab's saved list
+$('#btn-install-macros').addEventListener('click', () => {
+  directInstallToWord($('#m-filter-group').value, '', '');
+});
+$('#btn-install-shortcuts').addEventListener('click', () => {
+  directInstallToWord('', $('#s-group').value, '');
+});
+$('#btn-install-ribbon').addEventListener('click', () => {
+  directInstallToWord('', '', $('#r-group').value);
 });
 
 $('#btn-generate-installer').addEventListener('click', () => {
