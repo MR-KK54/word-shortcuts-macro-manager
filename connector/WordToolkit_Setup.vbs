@@ -13,7 +13,7 @@ Option Explicit
 ' ============================================================
 
 Dim Wsh, fso, url, appDataDir, i, n, f, http, w, vbProj, comp, compName
-Dim files, baseName, cmd, handlerPath, c
+Dim files, baseName, cmd, handlerPath, c, comps, docCreated, doc, importedCount, resText
 
 Set Wsh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -34,7 +34,6 @@ files = Array("Toolkit_Helpers.bas", "Toolkit_Macros.bas", "Toolkit_Menu.bas", _
               "sync-handler.vbs", "Enable_Word_Import_Access.vbs")
 n = 0
 For i = 0 To UBound(files)
-    Dim resText
     resText = FetchText(url & "/connector/" & files(i))
     If Len(resText) > 0 Then
         Set f = fso.CreateTextFile(fso.BuildPath(appDataDir, files(i)), True, True)
@@ -115,7 +114,6 @@ If w Is Nothing Then
     WScript.Quit
 End If
 
-Dim docCreated, doc
 docCreated = False
 On Error Resume Next
 Set doc = w.Documents.Add()
@@ -143,7 +141,6 @@ If comps Is Nothing Then
 End If
 On Error GoTo 0
 
-Dim importedCount
 importedCount = 0
 
 If Not comps Is Nothing Then

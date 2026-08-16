@@ -561,19 +561,10 @@ End Function`,
 'WordToolkit_Setup.vbs': `Option Explicit
 ' ============================================================
 '  WORD TOOLKIT - ONE-TIME SETUP (run once per PC)
-'  What it does:
-'   1. Downloads the connector modules + link handler from your server
-'   2. Registers the "wordtoolkit://" link so the web tool can
-'      install macros/shortcuts/ribbon into Word with one click
-'   3. Enables Word's import access automatically
-'      (Trust access to VBA project object model + all macros)
-'   4. Imports the connector modules into Word (Normal project)
-'  REQUIREMENT: close ALL other Word windows first, then
-'  double-click this file.
 ' ============================================================
 
 Dim Wsh, fso, url, appDataDir, i, n, f, http, w, vbProj, comp, compName
-Dim files, baseName, cmd, handlerPath, c
+Dim files, baseName, cmd, handlerPath, c, comps, docCreated, doc, importedCount, resText
 
 Set Wsh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -675,7 +666,6 @@ If w Is Nothing Then
     WScript.Quit
 End If
 
-Dim docCreated, doc
 docCreated = False
 On Error Resume Next
 Set doc = w.Documents.Add()
@@ -703,7 +693,6 @@ If comps Is Nothing Then
 End If
 On Error GoTo 0
 
-Dim importedCount
 importedCount = 0
 
 If Not comps Is Nothing Then
