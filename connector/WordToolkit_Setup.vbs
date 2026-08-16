@@ -84,14 +84,9 @@ EnableWordAccess Wsh
 
 ' --- 4. Import connector modules into Word (handler is NOT imported) ---
 On Error Resume Next
-' Close any running Word instances to release locks on Normal.dotm
-Set w = GetObject(, "Word.Application")
-If Not w Is Nothing Then
-    w.Quit
-    WScript.Sleep 500
-End If
-Err.Clear
 Wsh.Run "taskkill /F /IM winword.exe /T", 0, True
+WScript.Sleep 500
+Err.Clear
 
 ' Create a fresh, hidden Word instance
 Set w = CreateObject("Word.Application")
@@ -106,24 +101,25 @@ If w Is Nothing Then
     WScript.Quit
 End If
 
-Set normDoc = Nothing
+' Add a document context so Word instantiates NormalTemplate's VBProject
+docCreated = False
+On Error Resume Next
+Set doc = w.Documents.Add()
+docCreated = True
+On Error GoTo 0
+
+' Safely acquire Word's VB project & components container
+Set vbProj = Nothing
 Set comps = Nothing
 
 On Error Resume Next
-Set normDoc = w.NormalTemplate.OpenAsDocument()
-If Not normDoc Is Nothing Then Set comps = normDoc.VBProject.VBComponents
-On Error GoTo 0
-
-If comps Is Nothing Then
-    docCreated = False
-    On Error Resume Next
-    Set doc = w.Documents.Add()
-    docCreated = True
-    Set vbProj = w.NormalTemplate.VBProject
+Set vbProj = w.NormalTemplate.VBProject
+If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
+If comps Is Nothing And Not doc Is Nothing Then
+    Set vbProj = doc.VBProject
     If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
-    If comps Is Nothing And Not doc Is Nothing Then Set comps = doc.VBProject.VBComponents
-    On Error GoTo 0
 End If
+On Error GoTo 0
 
 importedCount = 0
 
@@ -143,13 +139,10 @@ If Not comps Is Nothing Then
     Next
 End If
 
+' Save NormalTemplate permanently and close cleanly
 On Error Resume Next
-If Not normDoc Is Nothing Then
-    normDoc.Save
-    normDoc.Close
-End If
-If docCreated And Not doc Is Nothing Then doc.Close False
 w.NormalTemplate.Save
+If docCreated And Not doc Is Nothing Then doc.Close False
 w.Quit
 Set w = Nothing
 On Error GoTo 0
