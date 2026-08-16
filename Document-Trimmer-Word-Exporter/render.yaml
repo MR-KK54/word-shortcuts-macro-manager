@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: word-exporter
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: RUNTIME_DIR
+        value: /tmp/word_export_runtime

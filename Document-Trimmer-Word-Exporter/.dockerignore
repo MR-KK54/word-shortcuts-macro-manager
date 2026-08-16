@@ -1,0 +1,10 @@
+runtime/
+__pycache__/
+*.pyc
+.git/
+.dockerignore
+Dockerfile
+README.md
+*.docx
+*.pdf
+node_modules/

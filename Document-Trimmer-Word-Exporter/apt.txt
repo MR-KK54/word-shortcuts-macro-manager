@@ -1,0 +1,7 @@
+libreoffice-writer
+libreoffice-core
+libreoffice-common
+libreoffice-style-colibre
+fonts-dejavu
+fonts-liberation
+fontconfig
