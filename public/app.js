@@ -952,11 +952,69 @@ async function deleteRibbon(id) {
 
 /* ---------- IMPORT / EXPORT HUB ---------- */
 
+/* ---- Progress bar helpers ---- */
+function showProgress(label, percent) {
+  const bar = $('#io-progress');
+  if (!bar) return;
+  bar.style.display = 'block';
+  $('#io-progress-label').textContent = label;
+  $('#io-progress-fill').style.width = Math.max(0, Math.min(100, percent)) + '%';
+}
+
+function hideProgress() {
+  const bar = $('#io-progress');
+  if (!bar) return;
+  bar.style.display = 'none';
+  $('#io-progress-fill').style.width = '0%';
+}
+
+// fetch wrapper that reports real byte-level upload/download progress
+function fetchWithProgress(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+
+    if (options.headers) {
+      Object.keys(options.headers).forEach(k => xhr.setRequestHeader(k, options.headers[k]));
+    }
+    if (options.responseType) xhr.responseType = options.responseType;
+
+    xhr.upload.onprogress = (e) => {
+      if (options.onUpload && e.lengthComputable) {
+        options.onUpload(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    xhr.onprogress = (e) => {
+      if (options.onDownload && e.lengthComputable) {
+        options.onDownload(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr);
+      else reject(new Error('Server returned status ' + xhr.status));
+    };
+    xhr.onerror = () => reject(new Error('Network error during transfer'));
+    xhr.send(options.body || null);
+  });
+}
+
 // Direct Word Sync bundle downloads
-$('#io-sync-macros').addEventListener('click', (e) => {
+$('#io-sync-macros').addEventListener('click', async (e) => {
   e.preventDefault();
   if (isServerOnline) {
-    window.location.href = `${apiBaseUrl}/sync/macros`;
+    try {
+      showProgress('Downloading macro bundle…', 3);
+      const xhr = await fetchWithProgress(`${apiBaseUrl}/sync/macros`, {
+        onDownload: p => showProgress(`Downloading macro bundle… ${p}%`, p)
+      });
+      showProgress('Finalizing macro bundle…', 100);
+      downloadFile('word-toolkit-macro-bundle.txt', xhr.responseText);
+      showToast('Downloaded macro bundle');
+    } catch (err) {
+      showToast('Download failed: ' + err.message);
+    } finally {
+      hideProgress();
+    }
   } else {
     const bundle = currentMacros.map(m => `@group=${m.group || 'General'}\n@name=${m.name}\n@type=${(m.type || 'bas').toLowerCase()}\n${m.code}\n#WTMACRO-END#\n`).join('');
     downloadFile('word-toolkit-macro-bundle.txt', 'WORDTOOLKIT MACRO BUNDLE v1\n' + bundle);
@@ -964,10 +1022,22 @@ $('#io-sync-macros').addEventListener('click', (e) => {
   }
 });
 
-$('#io-sync-shortcuts').addEventListener('click', (e) => {
+$('#io-sync-shortcuts').addEventListener('click', async (e) => {
   e.preventDefault();
   if (isServerOnline) {
-    window.location.href = `${apiBaseUrl}/sync/shortcuts`;
+    try {
+      showProgress('Downloading shortcut bundle…', 3);
+      const xhr = await fetchWithProgress(`${apiBaseUrl}/sync/shortcuts`, {
+        onDownload: p => showProgress(`Downloading shortcut bundle… ${p}%`, p)
+      });
+      showProgress('Finalizing shortcut bundle…', 100);
+      downloadFile('word-toolkit-shortcut-bundle.csv', xhr.responseText);
+      showToast('Downloaded shortcut bundle');
+    } catch (err) {
+      showToast('Download failed: ' + err.message);
+    } finally {
+      hideProgress();
+    }
   } else {
     const sets = currentShortcuts.map(sc => `#SET:${sc.name}${sc.group && sc.group !== 'General' ? ` (${sc.group})` : ''}\n${sc.csv}\n`).join('');
     downloadFile('word-toolkit-shortcut-bundle.csv', sets);
@@ -978,7 +1048,23 @@ $('#io-sync-shortcuts').addEventListener('click', (e) => {
 // Export full backup JSON
 $('#io-export-all').addEventListener('click', async () => {
   if (isServerOnline) {
-    window.location.href = `${apiBaseUrl}/export`;
+    try {
+      showProgress('Downloading system backup…', 3);
+      const xhr = await fetchWithProgress(`${apiBaseUrl}/export`, {
+        onDownload: p => showProgress(`Downloading system backup… ${p}%`, p)
+      });
+      showProgress('Finalizing backup file…', 100);
+
+      const disposition = String(xhr.getResponseHeader('Content-Disposition') || '');
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      const filename = match ? match[1] : `word-toolkit-backup-${Date.now()}.json`;
+      downloadFile(filename, xhr.responseText);
+      showToast('Exported system backup package');
+    } catch (err) {
+      showToast('Export failed: ' + err.message);
+    } finally {
+      hideProgress();
+    }
   } else {
     const backupPkg = {
       appName: 'Word Shortcuts & Macro Manager',
@@ -1008,14 +1094,16 @@ $('#io-btn-restore').addEventListener('click', () => {
     try {
       const parsedData = JSON.parse(reader.result);
       if (isServerOnline) {
-        const res = await fetch(`${apiBaseUrl}/import`, {
+        showProgress('Uploading backup to server…', 3);
+        const payload = JSON.stringify({ mode, data: parsedData });
+        await fetchWithProgress(`${apiBaseUrl}/import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, data: parsedData })
+          body: payload,
+          onUpload: p => showProgress(`Uploading backup… ${p}%`, p)
         });
-        const rData = await res.json();
-        if (!rData.success) throw new Error(rData.error);
-        showToast(rData.message);
+        showProgress('Import complete', 100);
+        showToast('Backup restored on server');
       } else {
         // Offline Restore
         if (mode === 'replace') {
@@ -1035,7 +1123,9 @@ $('#io-btn-restore').addEventListener('click', () => {
       }
       $('#io-restore-file').value = '';
       refreshAllData();
+      hideProgress();
     } catch (e) {
+      hideProgress();
       alert('Error parsing backup file: ' + e.message);
     }
   };
@@ -1063,41 +1153,58 @@ function initBatchDropZone() {
 }
 
 async function handleBatchFiles(files) {
+  const total = Array.from(files).length;
   let count = 0;
+  let failed = 0;
+  showProgress(`Importing 0 of ${total} files…`, 0);
   for (const file of Array.from(files)) {
+    const idx = count + failed;
+    const pct = Math.round(((idx) / total) * 100);
+    showProgress(`Importing "${file.name}"…`, pct);
     const ext = file.name.split('.').pop().toLowerCase();
-    if (['bas', 'cls', 'frm'].includes(ext)) {
-      const text = await file.text();
-      // Parse module name from Attribute VB_Name if present
-      let modName = file.name.replace(/\.[^/.]+$/, "");
-      const match = text.match(/Attribute\s+VB_Name\s*=\s*"([^"]+)"/i);
-      if (match && match[1]) modName = match[1];
+    try {
+      if (['bas', 'cls', 'frm'].includes(ext)) {
+        const text = await file.text();
+        // Parse module name from Attribute VB_Name if present
+        let modName = file.name.replace(/\.[^/.]+$/, "");
+        const match = text.match(/Attribute\s+VB_Name\s*=\s*"([^"]+)"/i);
+        if (match && match[1]) modName = match[1];
 
-      await saveMacroItem({
-        group: 'Imported Files',
-        name: modName,
-        type: ext,
-        code: text
-      });
-      count++;
-    } else if (ext === 'csv') {
-      const text = await file.text();
-      await saveShortcutItem({
-        name: file.name.replace(/\.csv$/i, ''),
-        csv: text
-      });
-      count++;
-    } else if (ext === 'officeui') {
-      const base64 = await readFileAsBase64(file);
-      await saveRibbonItem({
-        name: file.name.replace(/\.officeui$/i, ''),
-        filename: file.name,
-        base64: base64
-      });
-      count++;
+        await saveMacroItem({
+          group: 'Imported Files',
+          name: modName,
+          type: ext,
+          code: text
+        });
+        count++;
+      } else if (ext === 'csv') {
+        const text = await file.text();
+        await saveShortcutItem({
+          name: file.name.replace(/\.csv$/i, ''),
+          csv: text
+        });
+        count++;
+      } else if (ext === 'officeui') {
+        const base64 = await readFileAsBase64(file);
+        await saveRibbonItem({
+          name: file.name.replace(/\.officeui$/i, ''),
+          filename: file.name,
+          base64: base64
+        });
+        count++;
+      } else {
+        failed++;
+      }
+    } catch (err) {
+      failed++;
+      console.error('Import failed for', file.name, err);
     }
+    showProgress(`Imported ${count} of ${total} files…`, Math.round((count / total) * 100));
   }
-  showToast(`Successfully processed ${count} file(s)!`);
+  if (count === total) showProgress(`All ${count} file(s) imported`, 100);
+  else showProgress(`Imported ${count} of ${total} (${failed} failed)`, Math.round((count / total) * 100));
+  setTimeout(hideProgress, 1500);
+  showToast(`Successfully processed ${count} file(s)!` + (failed > 0 ? ` ${failed} failed.` : ''));
   refreshAllData();
 }
 
