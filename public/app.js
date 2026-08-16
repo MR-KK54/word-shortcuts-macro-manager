@@ -564,7 +564,7 @@ End Function`,
 ' ============================================================
 
 Dim Wsh, fso, url, appDataDir, i, n, f, w, vbProj, comp, compName
-Dim files, baseName, cmd, handlerPath, c, comps, docCreated, doc, importedCount, resText
+Dim files, baseName, cmd, handlerPath, c, comps, docCreated, doc, importedCount, resText, normDoc, normProj
 
 Set Wsh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -651,6 +651,7 @@ If Not w Is Nothing Then
     WScript.Sleep 500
 End If
 Err.Clear
+Wsh.Run "taskkill /F /IM winword.exe /T", 0, True
 
 ' Create a fresh, hidden Word instance
 Set w = CreateObject("Word.Application")
@@ -665,32 +666,24 @@ If w Is Nothing Then
     WScript.Quit
 End If
 
-docCreated = False
-On Error Resume Next
-Set doc = w.Documents.Add()
-docCreated = True
-On Error GoTo 0
-
-' Safely acquire Word's VB project & components container
-Set vbProj = Nothing
+Set normDoc = Nothing
 Set comps = Nothing
 
 On Error Resume Next
-Set vbProj = w.NormalTemplate.VBProject
-If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
-
-If comps Is Nothing And Not doc Is Nothing Then
-    Err.Clear
-    Set vbProj = doc.VBProject
-    If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
-End If
+Set normDoc = w.NormalTemplate.OpenAsDocument()
+If Not normDoc Is Nothing Then Set comps = normDoc.VBProject.VBComponents
+On Error GoTo 0
 
 If comps Is Nothing Then
-    Err.Clear
-    Set vbProj = w.VBE.ActiveVBProject
+    docCreated = False
+    On Error Resume Next
+    Set doc = w.Documents.Add()
+    docCreated = True
+    Set vbProj = w.NormalTemplate.VBProject
     If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
+    If comps Is Nothing And Not doc Is Nothing Then Set comps = doc.VBProject.VBComponents
+    On Error GoTo 0
 End If
-On Error GoTo 0
 
 importedCount = 0
 
@@ -710,14 +703,12 @@ If Not comps Is Nothing Then
     Next
 End If
 
-If docCreated And Not doc Is Nothing Then
-    On Error Resume Next
-    doc.Close False
-    On Error GoTo 0
-End If
-
-' Tell Word to save the Normal template and exit cleanly
 On Error Resume Next
+If Not normDoc Is Nothing Then
+    normDoc.Save
+    normDoc.Close
+End If
+If docCreated And Not doc Is Nothing Then doc.Close False
 w.NormalTemplate.Save
 w.Quit
 Set w = Nothing
