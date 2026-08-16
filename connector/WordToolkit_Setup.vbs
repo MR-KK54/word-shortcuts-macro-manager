@@ -34,26 +34,49 @@ files = Array("Toolkit_Helpers.bas", "Toolkit_Macros.bas", "Toolkit_Menu.bas", _
               "sync-handler.vbs", "Enable_Word_Import_Access.vbs")
 n = 0
 For i = 0 To UBound(files)
-    On Error Resume Next
-    Set http = CreateObject("MSXML2.XMLHTTP")
-    http.Open "GET", url & "/connector/" & files(i), False
-    http.Send
-    If Err.Number = 0 And http.Status >= 200 And http.Status < 300 Then
+    Dim resText
+    resText = FetchText(url & "/connector/" & files(i))
+    If Len(resText) > 0 Then
         Set f = fso.CreateTextFile(fso.BuildPath(appDataDir, files(i)), True, True)
-        f.Write http.ResponseText
+        f.Write resText
         f.Close
         n = n + 1
-    Else
-        MsgBox "Could not download " & files(i) & " (HTTP " & http.Status & ")." & vbCrLf & _
-               "Check the server URL or your internet connection." & vbCrLf & _
-               "Error: " & Err.Description, vbExclamation, "Word Toolkit Setup"
     End If
-    On Error GoTo 0
 Next
+
 If n = 0 Then
-    MsgBox "No connector files could be downloaded. Setup aborted.", vbCritical, "Word Toolkit Setup"
+    MsgBox "Could not connect to the Word Toolkit server at:" & vbCrLf & _
+           url & vbCrLf & vbCrLf & _
+           "• If running locally: Please start your server first (run 'npm start' in terminal)." & vbCrLf & _
+           "• If using online server: Check your internet connection and server URL.", _
+           vbCritical, "Word Toolkit Setup - Connection Error"
     WScript.Quit
 End If
+
+Function FetchText(httpUrl)
+    Dim http
+    FetchText = ""
+    On Error Resume Next
+    Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+    If http Is Nothing Or Err.Number <> 0 Then
+        Err.Clear
+        Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    End If
+    If http Is Nothing Or Err.Number <> 0 Then
+        Err.Clear
+        Set http = CreateObject("MSXML2.XMLHTTP")
+    End If
+    If Not http Is Nothing Then
+        http.Open "GET", httpUrl, False
+        http.Send
+        If Err.Number = 0 Then
+            If http.Status >= 200 And http.Status < 300 Then
+                FetchText = http.ResponseText
+            End If
+        End If
+    End If
+    On Error GoTo 0
+End Function
 
 ' --- 2. Register the wordtoolkit:// protocol link (points at the handler) ---
 cmd = """" & Wsh.ExpandEnvironmentStrings("%WINDIR%") & "\System32\wscript.exe"" """ & _
