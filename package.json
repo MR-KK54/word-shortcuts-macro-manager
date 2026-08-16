@@ -1,0 +1,16 @@
+{
+  "name": "word-shortcuts-macro-manager",
+  "version": "1.0.0",
+  "description": "Word Shortcuts & Macro Manager with Render hosting support, group storage, Word macro replacement, and Import/Export.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test-server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}

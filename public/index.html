@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Word Toolkit - Shortcuts & Macro Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Word Toolkit</h1>
+      <div class="tag">Server-side manager for Microsoft Word macros, keyboard shortcuts, and ribbon customizations — stored in groups and ready to sync.</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div class="server-status-pill" id="server-status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Connecting to Server…</span>
+      </div>
+      <button class="btn-icon" id="btn-open-settings" title="Server Settings">⚙️</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="macros" class="active">Macros</button>
+    <button data-tab="shortcuts">Shortcuts</button>
+    <button data-tab="ribbon">Ribbon &amp; QAT</button>
+    <button data-tab="io">Import / Export</button>
+    <button data-tab="connector">Get Connector</button>
+  </nav>
+
+  <main class="panel">
+
+    <!-- MACROS TAB -->
+    <section id="tab-macros" class="tab-content">
+      <div class="panel-grid">
+        <div>
+          <h2 class="section-title">Store a Macro</h2>
+          <p class="section-sub">Paste VBA module code exported from Word (Alt+F11 → Export File). If a macro with the same name exists in a group, it will be updated/replaced automatically.</p>
+
+          <label for="m-group">Storing Group Name</label>
+          <input type="text" id="m-group" placeholder="e.g. Formatting Tools, Legal Automation, General" list="group-suggestions">
+          <datalist id="group-suggestions"></datalist>
+
+          <label for="m-name">Module Name</label>
+          <input type="text" id="m-name" placeholder="e.g. FormatCleanup">
+
+          <label for="m-type">Module Type</label>
+          <select id="m-type">
+            <option value="bas">Standard module (.bas)</option>
+            <option value="cls">Class module (.cls)</option>
+            <option value="frm">Form (.frm)</option>
+          </select>
+
+          <label for="m-code">VBA Code</label>
+          <textarea id="m-code" placeholder="Sub MyMacro()&#10;    ' Your VBA logic here...&#10;End Sub"></textarea>
+
+          <div class="save-row">
+            <button class="btn" id="m-save">Save / Replace Macro</button>
+            <span class="status-msg" id="m-status"></span>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px;">
+            <div>
+              <h2 class="section-title">Saved Macros</h2>
+              <p class="section-sub" style="margin-bottom:0;">Grouped by your user-given storing name.</p>
+            </div>
+          </div>
+
+          <div class="filter-bar">
+            <input type="text" id="m-search" placeholder="Search macros or code...">
+            <select id="m-filter-group">
+              <option value="">All Groups</option>
+            </select>
+          </div>
+
+          <div class="group-container" id="m-list">
+            <div class="empty">Loading macros…</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHORTCUTS TAB -->
+    <section id="tab-shortcuts" class="tab-content" style="display:none;">
+      <div class="panel-grid">
+        <div>
+          <h2 class="section-title">Store Shortcut Set</h2>
+          <p class="section-sub">Paste the CSV exported from Word via the connector's <em>ExportKeyboardShortcuts</em> macro.</p>
+
+          <label for="s-name">Set Name</label>
+          <input type="text" id="s-name" placeholder="e.g. Editing Shortcuts - Laptop">
+
+          <label for="s-csv">CSV Content</label>
+          <textarea id="s-csv" placeholder="KeyCategory,Command,KeyCode,KeyCode2,KeyString"></textarea>
+
+          <div class="save-row">
+            <button class="btn" id="s-save">Save Shortcut Set</button>
+            <span class="status-msg" id="s-status"></span>
+          </div>
+        </div>
+        <div>
+          <h2 class="section-title">Saved Shortcut Sets</h2>
+          <p class="section-sub">Download back as .csv to import directly into Word.</p>
+          <div class="stamps" id="s-list"><div class="empty">Loading…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIBBON TAB -->
+    <section id="tab-ribbon" class="tab-content" style="display:none;">
+      <div class="panel-grid">
+        <div>
+          <h2 class="section-title">Store Ribbon &amp; QAT Profile</h2>
+          <p class="section-sub">Upload the <code>Word.officeUI</code> file produced by Word's Customize Ribbon tool or the connector.</p>
+
+          <label for="r-name">Profile Name</label>
+          <input type="text" id="r-name" placeholder="e.g. Editorial Layout 2026">
+
+          <label for="r-file">Select .officeUI File</label>
+          <input type="file" id="r-file" accept=".officeUI,.exportedUI">
+
+          <div class="save-row">
+            <button class="btn" id="r-save">Save Ribbon Profile</button>
+            <span class="status-msg" id="r-status"></span>
+          </div>
+        </div>
+        <div>
+          <h2 class="section-title">Saved Ribbon Profiles</h2>
+          <p class="section-sub">Stored safely on server for quick deployment.</p>
+          <div class="stamps" id="r-list"><div class="empty">Loading…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- IMPORT / EXPORT HUB TAB -->
+    <section id="tab-io" class="tab-content" style="display:none;">
+      <h2 class="section-title">Import &amp; Export Center</h2>
+      <p class="section-sub">Backup your entire macro shelf, export specific items, or import raw VBA / CSV / OfficeUI files.</p>
+
+      <div class="io-grid">
+        <div class="io-card">
+          <div>
+            <h3>📦 Export System Backup</h3>
+            <p>Download a single complete JSON backup package containing all stored macro groups, shortcut sets, and ribbon profiles.</p>
+          </div>
+          <button class="btn" id="io-export-all">Export System Backup (.json)</button>
+        </div>
+
+        <div class="io-card">
+          <div>
+            <h3>📥 Restore System Backup</h3>
+            <p>Upload a system JSON backup to restore all data to the Render server or local database.</p>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <select id="io-restore-mode">
+              <option value="merge">Merge with existing data (Replace matches)</option>
+              <option value="replace">Overwrite &amp; replace entire database</option>
+            </select>
+            <input type="file" id="io-restore-file" accept=".json">
+            <button class="btn secondary" id="io-btn-restore">Restore Backup</button>
+          </div>
+        </div>
+
+        <div class="io-card">
+          <div>
+            <h3>📁 Download Full Project (.zip)</h3>
+            <p>Download the complete source code, backend server, VBA connector scripts, and configuration packaged into a .zip file ready to deploy on Render or run locally.</p>
+          </div>
+          <a href="word-shortcuts-macro-manager.zip" download="word-shortcuts-macro-manager.zip" class="btn" style="text-decoration:none;">Download Project ZIP (.zip)</a>
+        </div>
+      </div>
+
+      <h2 class="section-title">Drag &amp; Drop Batch Import</h2>
+      <p class="section-sub">Drop <code>.bas</code>, <code>.cls</code>, <code>.frm</code>, <code>.csv</code>, or <code>.officeUI</code> files below to parse and save them instantly.</p>
+
+      <div class="drop-zone" id="batch-drop-zone">
+        <i>📁</i>
+        <strong>Drag files here or click to browse</strong>
+        <p style="margin: 6px 0 0; font-size:12px; color:var(--ink-soft);">Supports .bas, .cls, .frm (VBA), .csv (Shortcuts), .officeUI (Ribbon)</p>
+        <input type="file" id="batch-file-input" multiple style="display:none;" accept=".bas,.cls,.frm,.csv,.officeUI,.json">
+      </div>
+    </section>
+
+    <!-- CONNECTOR TAB -->
+    <section id="tab-connector" class="tab-content" style="display:none;">
+      <h2 class="section-title">Word Connector Setup (VBA)</h2>
+      <p class="section-sub" style="max-width:640px;">
+        To connect Microsoft Word on your computer with this manager, import these 5 VBA connector files into Word's VBA editor (Alt+F11). When importing macros into Word, existing modules with the same name are automatically replaced!
+      </p>
+
+      <ol class="connector-steps">
+        <li>Download the five <code>.bas</code> files below.</li>
+        <li>In Microsoft Word, press <strong>Alt+F11</strong> to open the VBA Editor, then click <strong>File → Import File</strong> for each module.</li>
+        <li>Enable <em>"Trust access to the VBA project object model"</em> under Word File → Options → Trust Center → Trust Center Settings → Macro Settings.</li>
+        <li>Press <strong>Alt+F8</strong> and run <code>ShowToolkitMenu</code> anytime to export/import macros with automatic replacement of existing files.</li>
+      </ol>
+
+      <h2 class="section-title">Download Connector Files</h2>
+      <div class="download-grid" id="connector-downloads"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- SERVER SETTINGS MODAL -->
+<div class="modal-backdrop" id="settings-modal" style="display:none;">
+  <div class="modal-box">
+    <h2 class="section-title">Server Settings</h2>
+    <p class="section-sub">Configure your Render backend server URL.</p>
+
+    <label for="server-url-input">Server API Base URL</label>
+    <input type="text" id="server-url-input" placeholder="e.g. https://word-macro-manager.onrender.com or /api">
+    <p style="font-size:12px; color:var(--ink-soft); margin-top:4px;">Leave as <code>/api</code> when hosted on the same server, or enter your Render service URL.</p>
+
+    <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn secondary" id="btn-close-settings">Cancel</button>
+      <button class="btn" id="btn-save-settings">Save &amp; Connect</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
