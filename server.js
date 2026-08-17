@@ -354,7 +354,7 @@ app.delete('/api/ribbon/:id', (req, res) => {
 // Connector source files (used by WordToolkit_Setup.vbs to install into Word)
 app.get('/api/connector/:file', (req, res) => {
   const { file } = req.params;
-  if (!/^[A-Za-z0-9_\-]+\.(bas|vbs)$/.test(file)) {
+  if (!/^[A-Za-z0-9_\-]+\.(bas|vbs|bat)$/.test(file)) {
     return res.status(400).json({ success: false, error: 'Invalid file name.' });
   }
   const fullPath = path.join(__dirname, 'connector', file);
@@ -363,11 +363,11 @@ app.get('/api/connector/:file', (req, res) => {
   }
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   let content = fs.readFileSync(fullPath, 'utf8');
-  if (file === 'WordToolkit_Setup.vbs') {
+  if (file === 'WordToolkit_Setup.vbs' || file === 'WordToolkit_Setup.bat' || file === 'Quick_Setup.vbs') {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
     const host = req.get('host') || 'localhost:3000';
     const serverApiUrl = `${protocol}://${host}/api`;
-    content = content.replace('"http://localhost:3000/api"', `"${serverApiUrl}"`);
+    content = content.replace('"http://localhost:3000/api"', `"${serverApiUrl}"`).replace('http://localhost:3000/api', serverApiUrl);
   }
   res.send(content);
 });
