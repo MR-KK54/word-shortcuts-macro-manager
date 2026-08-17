@@ -40,19 +40,27 @@
       <div class="panel-grid">
         <div>
           <h2 class="section-title">Store a Macro</h2>
-          <p class="section-sub">Macros are created directly from the shortcut sets you already imported — no manual module name, type, or VBA code needed. Every unique command in the chosen shortcut set becomes a macro in the group.</p>
+          <p class="section-sub">Create and save VBA macro modules with custom storing groups and code.</p>
+
+          <label for="m-name">Macro Module Name</label>
+          <input type="text" id="m-name" placeholder="e.g. LegalFormatter, AutoParagraphFormat, CleanDoc">
 
           <label for="m-group">Storing Group Name</label>
           <input type="text" id="m-group" placeholder="e.g. Formatting Tools, Legal Automation, General" list="group-suggestions">
           <datalist id="group-suggestions"></datalist>
 
-          <label for="m-shortcut-set">Shortcut Set</label>
-          <select id="m-shortcut-set">
-            <option value="">— Select an imported shortcut set —</option>
+          <label for="m-type">Module Type</label>
+          <select id="m-type">
+            <option value="bas">Standard Module (.bas)</option>
+            <option value="cls">Class Module (.cls)</option>
+            <option value="frm">UserForm (.frm)</option>
           </select>
 
+          <label for="m-code">VBA Code</label>
+          <textarea id="m-code" rows="6" placeholder="Sub MacroName()&#10;    ' Enter VBA code here&#10;End Sub" style="font-family: monospace; font-size: 13px;"></textarea>
+
           <div class="save-row">
-            <button class="btn" id="m-save">Save Macros from Shortcuts</button>
+            <button class="btn" id="m-save">Save Macro</button>
             <span class="status-msg" id="m-status"></span>
           </div>
         </div>

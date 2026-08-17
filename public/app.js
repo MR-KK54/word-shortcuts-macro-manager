@@ -1051,10 +1051,12 @@ function renderGroupedMacros() {
         downloadFile(`${macro.name}.${macro.type || 'bas'}`, macro.code);
       };
       stamp.querySelector('[data-act=edit]').onclick = () => {
+        $('#m-name').value = macro.name || '';
         $('#m-group').value = macro.group || '';
-        $('#m-shortcut-set').value = '';
+        $('#m-type').value = macro.type || 'bas';
+        $('#m-code').value = macro.code || '';
         window.scrollTo({ top: $('#tab-macros').offsetTop, behavior: 'smooth' });
-        showToast(`Loaded ${macro.name} — pick a shortcut set to recreate macros`);
+        showToast(`Loaded ${macro.name} into editor`);
       };
       stamp.querySelector('[data-act=del]').onclick = async () => {
         if (confirm(`Delete macro "${macro.name}" from group "${macro.group}"?`)) {
@@ -1129,93 +1131,44 @@ function renderGroupedMacros() {
 $('#m-search').addEventListener('input', renderGroupedMacros);
 $('#m-filter-group').addEventListener('change', renderGroupedMacros);
 
-// Save Macro Click Event — creates macros from the chosen imported shortcut set
+// Save Macro Click Event
 $('#m-save').addEventListener('click', async () => {
+  const rawName = $('#m-name').value.trim();
   const group = $('#m-group').value.trim() || 'General';
-  const setName = $('#m-shortcut-set').value;
+  const type = $('#m-type').value || 'bas';
+  let code = $('#m-code').value.trim();
   const status = $('#m-status');
 
-  if (!setName) {
-    status.textContent = 'Select an imported shortcut set first.';
+  if (!rawName) {
+    status.textContent = 'Please enter a macro module name.';
     status.className = 'status-msg err';
     return;
   }
 
-  const set = currentShortcuts.find(s => s.name === setName);
-  if (!set || !set.csv) {
-    status.textContent = 'Shortcut set not found.';
-    status.className = 'status-msg err';
-    return;
+  // Clean module name for valid VBA identifier
+  const name = rawName.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[0-9]/, 'M_$&');
+  if (!code) {
+    code = `Attribute VB_Name = "${name}"\n\nSub ${name}()\n    ' Macro code for ${name}\nEnd Sub`;
+  } else if (!code.includes('Attribute VB_Name')) {
+    code = `Attribute VB_Name = "${name}"\n\n${code}`;
   }
 
-  // Extract unique commands from the CSV, one macro per command
-  const commands = new Set();
-  (set.csv.split(/\r?\n/).slice(1)).forEach(line => {
-    if (!line.trim()) return;
-    const parts = line.split(',');
-    if (parts.length >= 2 && parts[1].trim()) commands.add(parts[1].trim());
-  });
-
-  if (commands.size === 0) {
-    status.textContent = 'No commands found in this shortcut set.';
-    status.className = 'status-msg err';
-    return;
-  }
-
-  status.textContent = `Saving ${commands.size} macro(s)…`;
+  status.textContent = `Saving macro "${name}"…`;
   status.className = 'status-msg';
 
   try {
-    let saved = 0, replaced = 0;
-    for (const cmd of commands) {
-      const name = cmd.split('.').pop(); // Normal.Module3.DecrementLeading -> DecrementLeading
-      const payload = {
-        group,
-        name,
-        type: 'bas',
-        code: `Attribute VB_Name = "${name}"\n\nSub ${name}()\n    ' Macro from shortcut set "${setName}"\nEnd Sub`
-      };
-      let action = 'created';
-      if (isServerOnline) {
-        const res = await fetch(`${apiBaseUrl}/macros`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Server save failed');
-        action = data.action;
-      } else {
-        const existingIdx = currentMacros.findIndex(m =>
-          m.name.toLowerCase() === payload.name.toLowerCase() &&
-          (m.group || 'General').toLowerCase() === group.toLowerCase()
-        );
-        const macroObj = {
-          id: existingIdx >= 0 ? currentMacros[existingIdx].id : 'macro-local-' + Date.now(),
-          ...payload, updatedAt: new Date().toISOString()
-        };
-        if (existingIdx >= 0) { currentMacros[existingIdx] = macroObj; action = 'replaced'; }
-        else currentMacros.push(macroObj);
-        localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
-      }
-      if (action === 'replaced') replaced++; else saved++;
-    }
+    const payload = { group, name, type, code };
+    await saveMacroItem(payload);
+    status.textContent = `✅ Saved macro "${name}" in group "${group}"!`;
+    status.className = 'status-msg success';
+    showToast(`Saved macro "${name}" in group "${group}"`);
 
-    // Bundle the shortcut set into the same group (update in place, no duplicates)
-    const scIdx = currentShortcuts.findIndex(s => s.name === setName);
-    if (scIdx >= 0) {
-      await saveShortcutItem({ id: currentShortcuts[scIdx].id, name: setName, group, csv: set.csv });
-    } else {
-      await saveShortcutItem({ name: setName, group, csv: set.csv });
-    }
-
-    showToast(`Saved ${saved} new macro(s), replaced ${replaced}`);
-    status.textContent = `Saved ${saved + replaced} macro(s) into "${group}"!`;
-    status.className = 'status-msg';
+    $('#m-name').value = '';
+    $('#m-code').value = '';
     refreshAllData();
     maybeAutoSync(group, '', '');
-  } catch (e) {
-    status.textContent = 'Save failed: ' + e.message;
+  } catch (err) {
+    status.textContent = 'Error saving macro: ' + err.message;
     status.className = 'status-msg err';
   }
 });
@@ -1243,12 +1196,8 @@ function exportMacroGroup(groupName, items) {
 
 /* ---------- SHORTCUTS MANAGEMENT ---------- */
 function populateMacroShortcutPicker() {
-  const picker = $('#m-shortcut-set');
-  if (!picker) return;
-  const prev = picker.value;
-  picker.innerHTML = '<option value="">— Select an imported shortcut set —</option>' +
-    currentShortcuts.map(sc =>
-      `<option value="${escapeHtml(sc.name)}"${sc.name === prev ? ' selected' : ''}>${escapeHtml(sc.name)}${sc.group && sc.group !== 'General' ? ` (${escapeHtml(sc.group)})` : ''}` 
+  // Shortcut picker removed from macro section
+}eHtml(sc.group)})` : ''}` 
     ).join('');
 }
 
@@ -1277,12 +1226,10 @@ async function refreshShortcuts() {
 
   if (currentShortcuts.length === 0) {
     listEl.innerHTML = '<div class="empty">No shortcut sets saved yet.</div>';
-    populateMacroShortcutPicker();
     return;
   }
 
   listEl.innerHTML = '';
-  populateMacroShortcutPicker();
   currentShortcuts.forEach(sc => {
     const rows = (sc.csv.match(/\n/g) || []).length;
     const el = document.createElement('div');
