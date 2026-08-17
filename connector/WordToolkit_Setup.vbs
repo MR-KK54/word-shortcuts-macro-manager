@@ -101,25 +101,36 @@ If w Is Nothing Then
     WScript.Quit
 End If
 
-' Add a document context so Word instantiates NormalTemplate's VBProject
-docCreated = False
+' Open Normal.dotm explicitly as a document context so Word instantiates NormalTemplate's VBProject
+Dim normPath, normDoc
+normPath = fso.BuildPath(Wsh.ExpandEnvironmentStrings("%APPDATA%"), "Microsoft\Templates\Normal.dotm")
+
+Set normDoc = Nothing
 On Error Resume Next
-Set doc = w.Documents.Add()
-docCreated = True
+If fso.FileExists(normPath) Then
+    Set normDoc = w.Documents.Open(normPath)
+Else
+    Set normDoc = w.Documents.Add()
+End If
 On Error GoTo 0
 
 ' Safely acquire Word's VB project & components container
 Set vbProj = Nothing
 Set comps = Nothing
 
-On Error Resume Next
-Set vbProj = w.NormalTemplate.VBProject
-If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
-If comps Is Nothing And Not doc Is Nothing Then
-    Set vbProj = doc.VBProject
+If Not normDoc Is Nothing Then
+    On Error Resume Next
+    Set vbProj = normDoc.VBProject
     If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
+    On Error GoTo 0
 End If
-On Error GoTo 0
+
+If comps Is Nothing Then
+    On Error Resume Next
+    Set vbProj = w.NormalTemplate.VBProject
+    If Not vbProj Is Nothing Then Set comps = vbProj.VBComponents
+    On Error GoTo 0
+End If
 
 importedCount = 0
 
@@ -141,8 +152,11 @@ End If
 
 ' Save NormalTemplate permanently and close cleanly
 On Error Resume Next
+If Not normDoc Is Nothing Then
+    normDoc.Save
+    normDoc.Close
+End If
 w.NormalTemplate.Save
-If docCreated And Not doc Is Nothing Then doc.Close False
 w.Quit
 Set w = Nothing
 On Error GoTo 0

@@ -112,23 +112,24 @@ If syncComp Is Nothing Then
     basFiles = Array("Toolkit_Helpers.bas", "Toolkit_Macros.bas", "Toolkit_Menu.bas", _
                      "Toolkit_RibbonQAT.bas", "Toolkit_Shortcuts.bas", "Toolkit_Sync.bas")
     
-    Set compsContainer = Nothing
+    Dim targetProj
+    Set targetProj = Nothing
     On Error Resume Next
-    Set compsContainer = w.NormalTemplate.VBProject.VBComponents
-    If compsContainer Is Nothing And w.Documents.Count > 0 Then
-        Set compsContainer = w.ActiveDocument.VBProject.VBComponents
+    Set targetProj = w.NormalTemplate.VBProject
+    If targetProj Is Nothing And w.Documents.Count > 0 Then
+        Set targetProj = w.ActiveDocument.VBProject
     End If
     On Error GoTo 0
     
-    If Not compsContainer Is Nothing Then
+    If Not targetProj Is Nothing Then
         For Each bFile In basFiles
             bName = Replace(bFile, ".bas", "")
             On Error Resume Next
             Set cObj = Nothing
-            Set cObj = compsContainer.Item(bName)
-            If Not cObj Is Nothing Then compsContainer.Remove cObj
+            Set cObj = targetProj.VBComponents.Item(bName)
+            If Not cObj Is Nothing Then targetProj.VBComponents.Remove cObj
             Err.Clear
-            compsContainer.Import fso.BuildPath(appDir, bFile)
+            targetProj.VBComponents.Import fso.BuildPath(appDir, bFile)
             On Error GoTo 0
         Next
         On Error Resume Next
