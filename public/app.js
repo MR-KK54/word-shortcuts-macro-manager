@@ -932,14 +932,26 @@ async function refreshMacros() {
     if (isServerOnline) {
       const res = await fetch(`${apiBaseUrl}/macros`);
       const data = await res.json();
-      currentMacros = data.macros || [];
+      const serverMacros = data.macros || [];
+      const raw = localStorage.getItem('wt_local_macros');
+      const localMacros = raw ? JSON.parse(raw) : [];
+
+      const seen = new Map();
+      [...serverMacros, ...localMacros].forEach(m => {
+        const key = (m.name || '').toLowerCase() + '|' + (m.group || 'General').toLowerCase();
+        const existing = seen.get(key);
+        if (!existing || (m.updatedAt || '') > (existing.updatedAt || '')) seen.set(key, m);
+      });
+      currentMacros = Array.from(seen.values());
+      localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
     } else {
       const raw = localStorage.getItem('wt_local_macros');
       currentMacros = raw ? JSON.parse(raw) : getSampleMacros();
     }
   } catch (e) {
     console.error('Failed to fetch macros:', e);
-    currentMacros = getSampleMacros();
+    const raw = localStorage.getItem('wt_local_macros');
+    currentMacros = raw ? JSON.parse(raw) : getSampleMacros();
   }
 
   updateGroupSuggestionsAndFilter();
@@ -1849,18 +1861,37 @@ function initBatchDropZone() {
 }
 
 async function saveMacroItem(item) {
-  if (isServerOnline) {
-    await fetch(`${apiBaseUrl}/macros`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item)
-    });
+  const macroObj = {
+    id: item.id || 'macro-local-' + Date.now(),
+    group: item.group || 'General',
+    name: item.name,
+    type: item.type || 'bas',
+    code: item.code,
+    updatedAt: new Date().toISOString()
+  };
+
+  // 1. Immediately persist to local memory array & localStorage
+  const idx = currentMacros.findIndex(m => m.name.toLowerCase() === item.name.toLowerCase());
+  if (idx >= 0) {
+    currentMacros[idx] = { ...currentMacros[idx], ...macroObj };
   } else {
-    const idx = currentMacros.findIndex(m => m.name.toLowerCase() === item.name.toLowerCase());
-    const macroObj = { ...item, id: 'macro-local-' + Date.now(), updatedAt: new Date().toISOString() };
-    if (idx >= 0) currentMacros[idx] = macroObj;
-    else currentMacros.push(macroObj);
-    localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
+    currentMacros.push(macroObj);
+  }
+  localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
+
+  // 2. Persist to server if online
+  if (isServerOnline) {
+    try {
+      const res = await fetch(`${apiBaseUrl}/macros`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Server save failed');
+    } catch (e) {
+      console.error('Server macro save failed, stored locally:', e);
+    }
   }
 }
 
