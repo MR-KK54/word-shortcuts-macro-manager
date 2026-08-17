@@ -9,7 +9,7 @@ Option Explicit
 ' ============================================================
 
 Dim argLine, parts, kv, i, dict, p, k, u, m, s, r, w, Wsh, v, secKey
-Dim here, fso, f, http, own, scriptDir
+Dim here, fso, f, http, own, scriptDir, syncComp, compsContainer, appDir, basFiles, bFile, bName, cObj
 
 Set Wsh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -86,17 +86,62 @@ If w Is Nothing Then
     Set w = CreateObject("Word.Application")
     w.Visible = True
 End If
-If Err.Number <> 0 Then
+If Err.Number <> 0 Or w Is Nothing Then
     MsgBox "Could not start Word: " & Err.Description, vbCritical, "Word Toolkit"
     WScript.Quit
 End If
 On Error GoTo 0
 
+If w.Documents.Count = 0 Then
+    On Error Resume Next
+    w.Documents.Add
+    On Error GoTo 0
+End If
+
+' Ensure Toolkit_Sync is imported into Word before executing
+Set syncComp = Nothing
+On Error Resume Next
+Set syncComp = w.NormalTemplate.VBProject.VBComponents("Toolkit_Sync")
+If syncComp Is Nothing And w.Documents.Count > 0 Then
+    Set syncComp = w.ActiveDocument.VBProject.VBComponents("Toolkit_Sync")
+End If
+On Error GoTo 0
+
+If syncComp Is Nothing Then
+    appDir = fso.BuildPath(Wsh.ExpandEnvironmentStrings("%APPDATA%"), "WordToolkit")
+    basFiles = Array("Toolkit_Helpers.bas", "Toolkit_Macros.bas", "Toolkit_Menu.bas", _
+                     "Toolkit_RibbonQAT.bas", "Toolkit_Shortcuts.bas", "Toolkit_Sync.bas")
+    
+    Set compsContainer = Nothing
+    On Error Resume Next
+    Set compsContainer = w.NormalTemplate.VBProject.VBComponents
+    If compsContainer Is Nothing And w.Documents.Count > 0 Then
+        Set compsContainer = w.ActiveDocument.VBProject.VBComponents
+    End If
+    On Error GoTo 0
+    
+    If Not compsContainer Is Nothing Then
+        For Each bFile In basFiles
+            bName = Replace(bFile, ".bas", "")
+            On Error Resume Next
+            Set cObj = Nothing
+            Set cObj = compsContainer.Item(bName)
+            If Not cObj Is Nothing Then compsContainer.Remove cObj
+            Err.Clear
+            compsContainer.Import fso.BuildPath(appDir, bFile)
+            On Error GoTo 0
+        Next
+        On Error Resume Next
+        w.NormalTemplate.Save
+        On Error GoTo 0
+    End If
+End If
+
 On Error Resume Next
 w.Run "Toolkit_Sync.SyncSelections", u, m, s, r
 If Err.Number <> 0 Then
     MsgBox "Direct install failed." & vbCrLf & _
-           "Run the one-time setup once (it installs the connector into Word)." & vbCrLf & _
+           "Please check 'Trust access to the VBA project object model' in Word Options -> Trust Center -> Macro Settings." & vbCrLf & _
            "Error: " & Err.Description, vbCritical, "Word Toolkit"
 End If
 On Error GoTo 0
