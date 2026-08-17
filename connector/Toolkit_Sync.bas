@@ -148,23 +148,38 @@ Public Function SyncMacrosFromServer(baseUrl As String, Optional grp As String =
         If ln = "#WTMACRO-END#" Then
             ' close current macro and install it
             If inMacro And compName <> "" And Len(code) > 0 Then
-                tmpFile = Environ$("TEMP") & "\wtk_" & compName & "." & compType
+                Dim cleanName As String, fileContent As String
+                cleanName = CleanModuleName(compName)
+                
+                If InStr(1, code, "Attribute VB_Name", vbTextCompare) = 0 Then
+                    fileContent = "Attribute VB_Name = """ & cleanName & """" & vbCrLf & code
+                Else
+                    fileContent = code
+                End If
+
+                tmpFile = Environ$("TEMP") & "\wtk_" & cleanName & "." & compType
                 fnum = FreeFile
                 Open tmpFile For Output As #fnum
-                Print #fnum, code
+                Print #fnum, fileContent
                 Close #fnum
 
                 ' Replace existing module with same name
                 On Error Resume Next
-                Set existingComp = vbProj.VBComponents(compName)
+                Set existingComp = vbProj.VBComponents(cleanName)
                 If Not existingComp Is Nothing Then
                     vbProj.VBComponents.Remove existingComp
                     replacedCount = replacedCount + 1
                 End If
+                Set existingComp = vbProj.VBComponents(compName)
+                If Not existingComp Is Nothing Then
+                    vbProj.VBComponents.Remove existingComp
+                End If
                 On Error GoTo HandleErr
 
                 vbProj.VBComponents.Import tmpFile
+                On Error Resume Next
                 fso.DeleteFile tmpFile, True
+                On Error GoTo HandleErr
                 count = count + 1
             End If
             inMacro = False
@@ -192,6 +207,22 @@ HandleErr:
     MsgBox "Could not install macros. Enable 'Trust access to the VBA project object model'." & vbCrLf & _
            "Error: " & Err.Description, vbCritical, "Sync Macros Error"
     SyncMacrosFromServer = "Macros: failed with error."
+End Function
+
+Private Function CleanModuleName(rawName As String) As String
+    Dim res As String, idx As Long, ch As String
+    res = ""
+    For idx = 1 To Len(rawName)
+        ch = Mid(rawName, idx, 1)
+        If (ch >= "A" And ch <= "Z") Or (ch >= "a" And ch <= "z") Or (ch >= "0" And ch <= "9") Or ch = "_" Then
+            res = res & ch
+        Else
+            res = res & "_"
+        End If
+    Next idx
+    If res = "" Then res = "UserMacro"
+    If Left(res, 1) >= "0" And Left(res, 1) <= "9" Then res = "M_" & res
+    CleanModuleName = res
 End Function
 
 ' --- SHORTCUTS ---
