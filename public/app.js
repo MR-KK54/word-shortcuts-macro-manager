@@ -938,6 +938,7 @@ async function refreshMacros() {
 
       const seen = new Map();
       [...serverMacros, ...localMacros].forEach(m => {
+        if (m.id === 'macro-1' || m.id === 'macro-2' || m.name === 'CleanFormatting' || m.name === 'WordCountReport') return;
         const key = (m.name || '').toLowerCase() + '|' + (m.group || 'General').toLowerCase();
         const existing = seen.get(key);
         if (!existing || (m.updatedAt || '') > (existing.updatedAt || '')) seen.set(key, m);
@@ -946,12 +947,12 @@ async function refreshMacros() {
       localStorage.setItem('wt_local_macros', JSON.stringify(currentMacros));
     } else {
       const raw = localStorage.getItem('wt_local_macros');
-      currentMacros = raw ? JSON.parse(raw) : getSampleMacros();
+      currentMacros = (raw ? JSON.parse(raw) : []).filter(m => m.id !== 'macro-1' && m.id !== 'macro-2' && m.name !== 'CleanFormatting' && m.name !== 'WordCountReport');
     }
   } catch (e) {
     console.error('Failed to fetch macros:', e);
     const raw = localStorage.getItem('wt_local_macros');
-    currentMacros = raw ? JSON.parse(raw) : getSampleMacros();
+    currentMacros = (raw ? JSON.parse(raw) : []).filter(m => m.id !== 'macro-1' && m.id !== 'macro-2' && m.name !== 'CleanFormatting' && m.name !== 'WordCountReport');
   }
 
   updateGroupSuggestionsAndFilter();
@@ -959,16 +960,7 @@ async function refreshMacros() {
 }
 
 function getSampleMacros() {
-  return [
-    {
-      id: 'm-sample-1',
-      group: 'Formatting Tools',
-      name: 'CleanFormatting',
-      type: 'bas',
-      code: `Attribute VB_Name = "CleanFormatting"\nOption Explicit\n\nSub RemoveExtraSpaces()\n    With Selection.Find\n        .ClearFormatting\n        .Replacement.ClearFormatting\n        .Text = "  "\n        .Replacement.Text = " "\n        .Forward = True\n        .Wrap = wdFindContinue\n        .Execute Replace:=wdReplaceAll\n    End With\n    MsgBox "Extra spaces removed!", vbInformation\nEnd Sub`,
-      updatedAt: new Date().toISOString()
-    }
-  ];
+  return [];
 }
 
 function updateGroupSuggestionsAndFilter() {

@@ -21,24 +21,7 @@ if (!fs.existsSync(DATA_DIR)) {
 
 function getDefaultDB() {
   return {
-    macros: [
-      {
-        id: 'macro-1',
-        group: 'Formatting Tools',
-        name: 'CleanFormatting',
-        type: 'bas',
-        code: `Attribute VB_Name = "CleanFormatting"\nOption Explicit\n\nSub RemoveExtraSpaces()\n    With Selection.Find\n        .ClearFormatting\n        .Replacement.ClearFormatting\n        .Text = "  "\n        .Replacement.Text = " "\n        .Forward = True\n        .Wrap = wdFindContinue\n        .Execute Replace:=wdReplaceAll\n    End With\n    MsgBox "Extra spaces removed!", vbInformation, "Clean Formatting"\nEnd Sub`,
-        updatedAt: new Date().toISOString()
-      },
-      {
-        id: 'macro-2',
-        group: 'Document Utilities',
-        name: 'WordCountReport',
-        type: 'bas',
-        code: `Attribute VB_Name = "WordCountReport"\nOption Explicit\n\nSub ShowDocumentStats()\n    Dim words As Long, paras As Long\n    words = ActiveDocument.Words.Count\n    paras = ActiveDocument.Paragraphs.Count\n    MsgBox "Words: " & words & vbCrLf & "Paragraphs: " & paras, vbInformation, "Document Statistics"\nEnd Sub`,
-        updatedAt: new Date().toISOString()
-      }
-    ],
+    macros: [],
     shortcuts: [
       {
         id: 'shortcut-1',
