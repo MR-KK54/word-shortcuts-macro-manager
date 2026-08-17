@@ -1188,8 +1188,6 @@ function exportMacroGroup(groupName, items) {
 /* ---------- SHORTCUTS MANAGEMENT ---------- */
 function populateMacroShortcutPicker() {
   // Shortcut picker removed from macro section
-}eHtml(sc.group)})` : ''}` 
-    ).join('');
 }
 
 async function refreshShortcuts() {
