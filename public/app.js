@@ -1192,22 +1192,25 @@ function populateMacroShortcutPicker() {
 async function refreshShortcuts() {
   const listEl = $('#s-list');
   try {
+    let rawSets = [];
     if (isServerOnline) {
       const res = await fetch(`${apiBaseUrl}/shortcuts`);
       const data = await res.json();
-      currentShortcuts = data.shortcuts || [];
-} else {
-    const raw = localStorage.getItem('wt_local_shortcuts');
-    let local = raw ? JSON.parse(raw) : [];
+      rawSets = data.shortcuts || [];
+    } else {
+      const raw = localStorage.getItem('wt_local_shortcuts');
+      rawSets = raw ? JSON.parse(raw) : [];
+    }
+
     const seen = new Map();
-    local.forEach(s => {
+    rawSets.forEach(s => {
+      if (s.id === 'shortcut-1' || (s.name || '').toLowerCase() === 'editor master layout') return;
       const key = (s.name || '').toLowerCase();
       const existing = seen.get(key);
       if (!existing || (s.updatedAt || '') > (existing.updatedAt || '')) seen.set(key, s);
     });
     currentShortcuts = Array.from(seen.values());
     localStorage.setItem('wt_local_shortcuts', JSON.stringify(currentShortcuts));
-  }
   } catch (e) {
     currentShortcuts = [];
   }

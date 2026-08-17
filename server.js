@@ -24,12 +24,6 @@ function getDefaultDB() {
     macros: [],
     shortcuts: [
       {
-        id: 'shortcut-1',
-        name: 'Editor Master Layout',
-        csv: `KeyCategory,Command,KeyCode,KeyCode2,KeyString\n1,CleanFormatting,70,1024,"Ctrl+Shift+F"\n1,WordCountReport,87,1024,"Ctrl+Shift+W"`,
-        updatedAt: new Date().toISOString()
-      },
-      {
         id: 'shortcut-kishore',
         group: 'Kishore',
         name: "Kishore Shortcut's",
