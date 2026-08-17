@@ -2037,8 +2037,8 @@ function initConnectorDownloads() {
 /* ---------- HELPERS ---------- */
 function downloadFile(filename, content) {
   let finalContent = content;
-  if (filename === 'WordToolkit_Setup.vbs' && typeof finalContent === 'string') {
-    finalContent = finalContent.replace('"http://localhost:3000/api"', `"${getActiveServerUrl()}"`);
+  if ((filename === 'WordToolkit_Setup.vbs' || filename === 'WordToolkit_Setup.bat' || filename === 'WordToolkit_Setup.cmd' || filename === 'Quick_Setup.vbs') && typeof finalContent === 'string') {
+    finalContent = finalContent.replace('"http://localhost:3000/api"', `"${getActiveServerUrl()}"`).replace('http://localhost:3000/api', getActiveServerUrl());
   }
   const blob = new Blob([finalContent], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
