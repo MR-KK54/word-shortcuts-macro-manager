@@ -1052,9 +1052,6 @@ function renderGroupedMacros() {
       };
       stamp.querySelector('[data-act=edit]').onclick = () => {
         $('#m-name').value = macro.name || '';
-        $('#m-group').value = macro.group || '';
-        $('#m-type').value = macro.type || 'bas';
-        $('#m-code').value = macro.code || '';
         window.scrollTo({ top: $('#tab-macros').offsetTop, behavior: 'smooth' });
         showToast(`Loaded ${macro.name} into editor`);
       };
@@ -1134,24 +1131,19 @@ $('#m-filter-group').addEventListener('change', renderGroupedMacros);
 // Save Macro Click Event
 $('#m-save').addEventListener('click', async () => {
   const rawName = $('#m-name').value.trim();
-  const group = $('#m-group').value.trim() || 'General';
-  const type = $('#m-type').value || 'bas';
-  let code = $('#m-code').value.trim();
   const status = $('#m-status');
 
   if (!rawName) {
-    status.textContent = 'Please enter a macro module name.';
+    status.textContent = 'Please enter a macro name.';
     status.className = 'status-msg err';
     return;
   }
 
   // Clean module name for valid VBA identifier
   const name = rawName.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[0-9]/, 'M_$&');
-  if (!code) {
-    code = `Attribute VB_Name = "${name}"\n\nSub ${name}()\n    ' Macro code for ${name}\nEnd Sub`;
-  } else if (!code.includes('Attribute VB_Name')) {
-    code = `Attribute VB_Name = "${name}"\n\n${code}`;
-  }
+  const group = 'General';
+  const type = 'bas';
+  const code = `Attribute VB_Name = "${name}"\n\nSub ${name}()\n    ' Macro code for ${name}\nEnd Sub`;
 
   status.textContent = `Saving macro "${name}"…`;
   status.className = 'status-msg';
@@ -1159,12 +1151,11 @@ $('#m-save').addEventListener('click', async () => {
   try {
     const payload = { group, name, type, code };
     await saveMacroItem(payload);
-    status.textContent = `✅ Saved macro "${name}" in group "${group}"!`;
+    status.textContent = `✅ Saved macro "${name}"!`;
     status.className = 'status-msg success';
-    showToast(`Saved macro "${name}" in group "${group}"`);
+    showToast(`Saved macro "${name}"`);
 
     $('#m-name').value = '';
-    $('#m-code').value = '';
     refreshAllData();
     maybeAutoSync(group, '', '');
   } catch (err) {
